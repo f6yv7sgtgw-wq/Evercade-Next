@@ -1,0 +1,10 @@
+{
+  "product": "Project Evercade Next",
+  "version": "1.0.0",
+  "displayVersion": "1.0.0",
+  "channel": "stable",
+  "releaseDate": "2026-08-07",
+  "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
+  "deployment": "github-actions-pages",
+  "versionSource": "VERSION.json"
+}
