@@ -1,0 +1,11 @@
+{
+  "name": "Project Evercade Next",
+  "short_name": "Evercade",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080a0f",
+  "theme_color": "#080a0f",
+  "description": "Evercade-Sammlung, Katalog und Preisverwaltung"
+}
