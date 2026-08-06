@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+const read = p => fs.readFileSync(p,'utf8');
+const json = p => JSON.parse(read(p));
+const version = json('VERSION.json').version;
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('VERSION.json must contain semantic version x.y.z');
+for (const file of ['index.html','styles.css','manifest.webmanifest','src/config.js','src/catalog.js','src/app.js','.nojekyll']) if (!fs.existsSync(file)) throw new Error(`Missing ${file}`);
+const html = read('index.html');
+for (const asset of ['styles.css','src/config.js','src/catalog.js','src/app.js']) if (!html.includes(asset)) throw new Error(`index.html does not load ${asset}`);
+const catalogSource = read('src/catalog.js');
+const count = (catalogSource.match(/\['(?:console|arcade|computer)',\d+,/g)||[]).length;
+if (count !== 87) throw new Error(`Expected 87 catalog entries, found ${count}`);
+if (/0\.9\.|0\.8\.|0\.7\./.test(read('src/app.js')+read('src/config.js')+html)) throw new Error('Legacy version literal found in runtime source');
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries.`);
