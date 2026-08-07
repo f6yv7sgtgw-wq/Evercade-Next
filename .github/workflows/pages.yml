@@ -26,6 +26,7 @@ jobs:
       - run: node --check src/catalog.js
       - run: node --check src/eventlog.js
       - run: node --check src/debug.js
+      - run: node --check src/endpoint-test.js
       - run: node --check src/parser-client.js
       - run: node --check src/app.js
       - run: node --check scripts/smoke.mjs
