@@ -19,28 +19,30 @@ window.EVERCADE_CONFIG = Object.freeze({
   ]),
   genericParserCorsHeaders: Object.freeze(['access-control-allow-origin','access-control-allow-methods','access-control-allow-headers']),
   dealApiUrl: 'https://project-evercade-deal-api.jnldc.chatgpt.site',
-  automatedSources: Object.freeze([
+  sourceRegistry: Object.freeze([
     Object.freeze({name:'Kleinanzeigen',kind:'parser'}),
-    Object.freeze({name:'eBay Deutschland',kind:'retailer'}),
-    Object.freeze({name:'Amazon Deutschland',kind:'retailer'}),
-    Object.freeze({name:'Google Shopping',kind:'retailer'}),
-    Object.freeze({name:'Idealo',kind:'retailer'}),
-    Object.freeze({name:'Kaufland',kind:'retailer'}),
-    Object.freeze({name:'Retroplace',kind:'retailer'}),
-    Object.freeze({name:'DragonBox',kind:'retailer'}),
     Object.freeze({name:'ASC-Shop',kind:'retailer'}),
-    Object.freeze({name:'Funstock',kind:'retailer'})
+    Object.freeze({name:'Coolshop Deutschland',kind:'retailer'}),
+    Object.freeze({name:'DragonBox',kind:'retailer'}),
+    Object.freeze({name:'eBay Deutschland',kind:'retailer'}),
+    Object.freeze({name:'Enzinger',kind:'retailer'}),
+    Object.freeze({name:'Funstock',kind:'retailer'}),
+    Object.freeze({name:'GameCenterVS',kind:'retailer'}),
+    Object.freeze({name:'Just For Games Deutschland',kind:'retailer'}),
+    Object.freeze({name:'TruMox',kind:'retailer'}),
+    Object.freeze({name:'Vitrex-Shop',kind:'retailer'})
   ]),
   directSources: Object.freeze([
-    {name:'eBay Deutschland',url:'https://www.ebay.de/sch/i.html?_nkw={query}'},
     {name:'Kleinanzeigen',url:'https://www.kleinanzeigen.de/s-{query}/k0'},
-    {name:'Amazon Deutschland',url:'https://www.amazon.de/s?k={query}'},
-    {name:'Google Shopping',url:'https://www.google.com/search?tbm=shop&q={query}'},
-    {name:'Idealo',url:'https://www.idealo.de/preisvergleich/MainSearchProductCategory.html?q={query}'},
-    {name:'Kaufland',url:'https://www.kaufland.de/s/?search_value={query}'},
-    {name:'Retroplace',url:'https://www.retroplace.com/de/suche?q={query}'},
-    {name:'DragonBox',url:'https://dragonbox.de/de/suche?sSearch={query}'},
     {name:'ASC-Shop',url:'https://www.asc-shop.de/shop/action/modul/side/27/action3/psearch/psearch/show2/modul/10/suchstring/{query}'},
-    {name:'Funstock',url:'https://funstock.co.uk/search?type=product&q={query}'}
+    {name:'Coolshop Deutschland',url:'https://www.coolshop.de/videospiele-und-konsolen/retro-gaming/marke%3Devercade/'},
+    {name:'DragonBox',url:'https://dragonbox.de/de/suche?sSearch={query}'},
+    {name:'eBay Deutschland',url:'https://www.ebay.de/sch/i.html?_nkw={query}'},
+    {name:'Enzinger',url:'https://www.enzinger.com/brands/evercade/'},
+    {name:'Funstock',url:'https://funstock.eu/search?type=product&q={query}'},
+    {name:'GameCenterVS',url:'https://www.gamecentervs.de/search?q={query}'},
+    {name:'Just For Games Deutschland',url:'https://www.shop-justforgames.de/search?q={query}'},
+    {name:'TruMox',url:'https://www.trumox.de/advanced_search_result.php?keywords={query}'},
+    {name:'Vitrex-Shop',url:'https://www.vitrex-shop.de/de/retro__283/'}
   ])
 });
