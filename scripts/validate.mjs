@@ -47,19 +47,26 @@ const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 if (!configSource.includes('generic-parser-module-v1')) throw new Error('GenericParser contract missing');
+if (!configSource.includes("genericParserExpectedVersion: '0.45.1'")) throw new Error('GenericParser 0.45.1 expectation missing');
 if (!configSource.includes('genericParserSearchPaths')) throw new Error('GenericParser endpoint paths missing');
-if (!configSource.includes('genericParserEndpointTests')) throw new Error('Phase 5.2 endpoint test matrix missing');
-for (const marker of ['GET /search','POST /search','POST /api/search','POST /api/module/search']) {
+if (!configSource.includes('genericParserDiagnosticPaths')) throw new Error('GenericParser diagnostic paths missing');
+if (!configSource.includes('genericParserEndpointTests')) throw new Error('GenericParser endpoint test matrix missing');
+for (const marker of ['GET /health','GET /version','GET /diagnostics','OPTIONS /api/module/search','POST /search','POST /api/search','POST /api/module/search']) {
   if (!configSource.includes(marker)) throw new Error(`Endpoint test definition missing: ${marker}`);
 }
 if (!parserSource.includes("source:'auto'") && !parserSource.includes("source: 'auto'")) throw new Error('GenericParser live source request missing');
 if (!parserSource.includes('window.EvercadeSearch')) throw new Error('Search client export missing');
-if (!parserSource.includes('parser.request') || !parserSource.includes('parser.failure')) throw new Error('Parser event logging missing');
+for (const marker of ['x-request-id','requestId','timestamp','origin','userAgent','durationMs','status','hitCount','parser.request','parser.response','parser.failure']) {
+  if (!parserSource.includes(marker)) throw new Error(`4.5.1 parser observability marker missing: ${marker}`);
+}
 if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log export missing');
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
 if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics completion logging missing');
-for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure','endpoint.test.matrix.complete']) {
-  if (!endpointSource.includes(marker)) throw new Error(`Phase 5.2 endpoint diagnostic marker missing: ${marker}`);
+for (const marker of ['Worker Health','Worker Version','Worker Diagnostics']) {
+  if (!debugSource.includes(marker)) throw new Error(`4.5.1 health diagnostic missing: ${marker}`);
+}
+for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure','endpoint.test.matrix.complete','access-control-allow-origin']) {
+  if (!endpointSource.includes(marker)) throw new Error(`4.5.1 endpoint diagnostic marker missing: ${marker}`);
 }
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
 for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) {
@@ -70,6 +77,8 @@ if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned'))
 const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
-if (String(release.phase) !== '5.2') throw new Error('Release phase must be 5.2');
+if (String(release.phase) !== '4.5.1') throw new Error('Release phase must be 4.5.1');
+if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
+if (release.genericParser?.expectedVersion !== '0.45.1') throw new Error('Release metadata must target GenericParser 0.45.1');
 
-console.log(`Evercade Next ${version}: phase ${release.phase} validation passed with ${count} catalog entries, full-search queue and GenericParser endpoint diagnostics.`);
+console.log(`Evercade Next ${version}: infrastructure validation passed with ${count} catalog entries, GenericParser 0.45.1 diagnostics, CORS checks and unchanged module contract.`);
