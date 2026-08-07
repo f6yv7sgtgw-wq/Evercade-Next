@@ -9,7 +9,7 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('VERSION.json must contain
 
 const requiredFiles = [
   'index.html','debug.html','styles.css','manifest.webmanifest',
-  'src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/parser-client.js','src/app.js',
+  'src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js','src/parser-client.js','src/app.js',
   'scripts/smoke.mjs','.nojekyll'
 ];
 for (const file of requiredFiles) if (!fs.existsSync(file)) throw new Error(`Missing ${file}`);
@@ -27,10 +27,10 @@ for (const id of ['queueView','queueStart','queuePause','queueResume','queueRese
 }
 
 const debugHtml = read('debug.html');
-for (const asset of ['styles.css','src/config.js','src/eventlog.js','src/debug.js']) {
+for (const asset of ['styles.css','src/config.js','src/eventlog.js','src/debug.js','src/endpoint-test.js']) {
   if (!debugHtml.includes(asset)) throw new Error(`debug.html does not load ${asset}`);
 }
-for (const id of ['runChecks','healthChecks','downloadLog','clearLog','eventLog']) {
+for (const id of ['runChecks','healthChecks','downloadLog','clearLog','eventLog','runAllEndpointTests','endpointTestButtons','endpointTestResults']) {
   if (!debugHtml.includes(`id="${id}"`)) throw new Error(`Missing diagnostics element ${id}`);
 }
 
@@ -43,25 +43,33 @@ const configSource = read('src/config.js');
 const parserSource = read('src/parser-client.js');
 const eventSource = read('src/eventlog.js');
 const debugSource = read('src/debug.js');
+const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 if (!configSource.includes('generic-parser-module-v1')) throw new Error('GenericParser contract missing');
 if (!configSource.includes('genericParserSearchPaths')) throw new Error('GenericParser endpoint paths missing');
-if (!parserSource.includes("source:'kleinanzeigen'") && !parserSource.includes("source: 'kleinanzeigen'")) throw new Error('Kleinanzeigen adapter request missing');
+if (!configSource.includes('genericParserEndpointTests')) throw new Error('Phase 5.2 endpoint test matrix missing');
+for (const marker of ['GET /search','POST /search','POST /api/search','POST /api/module/search']) {
+  if (!configSource.includes(marker)) throw new Error(`Endpoint test definition missing: ${marker}`);
+}
+if (!parserSource.includes("source:'auto'") && !parserSource.includes("source: 'auto'")) throw new Error('GenericParser live source request missing');
 if (!parserSource.includes('window.EvercadeSearch')) throw new Error('Search client export missing');
 if (!parserSource.includes('parser.request') || !parserSource.includes('parser.failure')) throw new Error('Parser event logging missing');
 if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log export missing');
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
 if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics completion logging missing');
+for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure','endpoint.test.matrix.complete']) {
+  if (!endpointSource.includes(marker)) throw new Error(`Phase 5.2 endpoint diagnostic marker missing: ${marker}`);
+}
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
 for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) {
   if (!appSource.includes(marker)) throw new Error(`Phase 5.1 queue marker missing: ${marker}`);
 }
 if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Queue priority or missing-cartridge filter is not connected to collection state');
 
-const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + html + debugHtml;
+const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
-if (String(release.phase) !== '5.1') throw new Error('Release phase must be 5.1');
+if (String(release.phase) !== '5.2') throw new Error('Release phase must be 5.2');
 
-console.log(`Evercade Next ${version}: phase ${release.phase} validation passed with ${count} catalog entries, diagnostics and persistent full-search queue.`);
+console.log(`Evercade Next ${version}: phase ${release.phase} validation passed with ${count} catalog entries, full-search queue and GenericParser endpoint diagnostics.`);
