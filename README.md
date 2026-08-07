@@ -1,4 +1,4 @@
-# Project Evercade Next 1.3.0
+# Project Evercade Next 1.4.0
 
 Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früheren Repository.
 
@@ -42,19 +42,39 @@ Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früh
 
 ## Phase 5.1 – Suchengine für alle fehlenden Cartridges
 
-- neue Ansicht `Vollsuche`
-- erzeugt eine Warteschlange ausschließlich aus nicht vorhandenen Cartridges
-- Wunschlisten-Einträge werden zuerst verarbeitet
+- Ansicht `Vollsuche`
+- Warteschlange ausschließlich aus nicht vorhandenen Cartridges
+- Wunschlisten-Einträge zuerst
 - danach deterministische Reihenfolge nach Serie und Katalognummer
-- Suche läuft Cartridge für Cartridge über den bestehenden automatischen Suchclient
-- Fortschritt, aktueller Eintrag, Treffer und Fehler werden live angezeigt
 - Start, Pause, Fortsetzen und Zurücksetzen
-- Warteschlange, Fortschritt und Ergebnisse werden in `localStorage` gespeichert
-- ein während eines Browser-Neustarts laufender Suchlauf wird automatisch wieder aufgenommen
-- bereits abgeschlossene Einträge werden beim Fortsetzen nicht erneut verarbeitet
-- jeder Queue-Schritt wird im Eventlog protokolliert
+- persistenter Fortschritt und per-Cartridge-Suchergebnisse
+- Eventlog für jeden Queue-Schritt
 
-Phase 5.1 stellt die Suchwarteschlange bereit. Die Erweiterung auf die vollständige Multi-Quellen-Automatik folgt in Phase 5.2.
+## Phase 5.2 – GenericParser-Endpunktdiagnose
+
+Die Vollsuche zeigte, dass der Browser den konfigurierten GenericParser-Worker derzeit nicht zuverlässig erreicht. Phase 5.2 macht diese Schnittstelle deshalb direkt aus der ausgelieferten GitHub-Pages-Anwendung messbar.
+
+Auf `debug.html` stehen vier Einzeltests und ein Gesamttest bereit:
+
+- `GET /search`
+- `POST /search`
+- `POST /api/search`
+- `POST /api/module/search`
+
+Jeder Test zeigt:
+
+- vollständigen Ziel-Endpunkt
+- HTTP-Status, falls eine Antwort im Browser ankommt
+- Fetch-/Load-Fehler, falls keine auswertbare Browserantwort ankommt
+- Response-Type
+- lesbare Response-Header
+- Antwortinhalt bis 6000 Zeichen
+- Laufzeit
+- kurze Diagnose zur Unterscheidung von HTTP-/Routing-Problemen und Browser/CORS-/Preflight-Problemen
+
+Alle Testergebnisse werden zusätzlich im Eventlog als `endpoint.test.*` protokolliert. Die Testmatrix liegt zentral in `src/config.js`; `scripts/validate.mjs` und der Pages-Workflow prüfen die Phase-5.2-Dateien vor jedem Deployment.
+
+Die eigentliche Multi-Quellen-Automatik wird erst auf dem durch Phase 5.2 bestätigten funktionierenden Parser-Endpunkt aufgebaut, damit fehlgeschlagene Requests nicht erneut als echte Nulltreffer gewertet werden.
 
 ## Entwicklung
 
@@ -63,6 +83,7 @@ node --check src/config.js
 node --check src/catalog.js
 node --check src/eventlog.js
 node --check src/debug.js
+node --check src/endpoint-test.js
 node --check src/parser-client.js
 node --check src/app.js
 node --check scripts/smoke.mjs
@@ -75,4 +96,4 @@ Der einzige Workflow `.github/workflows/pages.yml` validiert, veröffentlicht un
 
 Anwendung: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/`
 
-Diagnose: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/debug.html`
+Diagnose und Phase-5.2-Endpunkttests: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/debug.html`
