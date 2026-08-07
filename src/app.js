@@ -3,14 +3,19 @@
   const catalog = window.EVERCADE_CATALOG || [];
   const config = window.EVERCADE_CONFIG;
   const searchClient = window.EvercadeSearch;
+  const log = (level,event,details={}) => window.EVERCADE_LOG?.log(level,event,details);
   const defaultOwned = ['console-31','console-34','console-37','console-40','console-48','arcade-1','computer-8'];
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
   const seriesLabel = {console:'Console',arcade:'Arcade',computer:'Home Computer'};
   const seriesOrder = {console:0,arcade:1,computer:2};
   const load = () => { try { return JSON.parse(localStorage.getItem(config.storageKey)) || {}; } catch { return {}; } };
-  let state = { owned: defaultOwned, wishlist: [], prices: {}, notes: {}, searches: {}, ...load() };
+  const emptyQueue = () => ({status:'idle',keys:[],index:0,done:0,offers:0,errors:0,startedAt:null,updatedAt:null,current:null});
+  let state = { owned: defaultOwned, wishlist: [], prices: {}, notes: {}, searches: {}, queue: emptyQueue(), ...load() };
+  if (!state.queue || !Array.isArray(state.queue.keys)) state.queue = emptyQueue();
   let searchController = null;
+  let queueController = null;
+  let queueLoopActive = false;
   const save = () => localStorage.setItem(config.storageKey, JSON.stringify(state));
   const money = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2).replace('.',',')} €` : '—';
   const item = key => catalog.find(x => x.key === key);
@@ -63,8 +68,118 @@
     try { const result=await searchClient.search(cartridge,{signal:searchController.signal}); renderDealResult(result,cartridge); }
     catch(error){ if(error.name==='AbortError')return; $('#dealStatusBadge').textContent='Fehler'; $('#dealStatus').textContent=error.message; }
   }
+
+  function queueOrder(){
+    const missing=catalog.filter(x=>!state.owned.includes(x.key));
+    const wished=new Set(state.wishlist);
+    return [...missing].sort((a,b)=>{
+      const wp=(wished.has(a.key)?0:1)-(wished.has(b.key)?0:1);
+      return wp || (seriesOrder[a.series]-seriesOrder[b.series]) || (a.number-b.number);
+    });
+  }
+  function createQueue(){
+    const ordered=queueOrder();
+    state.queue={status:'paused',keys:ordered.map(x=>x.key),index:0,done:0,offers:0,errors:0,startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),current:null};
+    save();
+    log('info','queue.created',{total:ordered.length,wishlistFirst:state.wishlist.filter(k=>ordered.some(x=>x.key===k)).length});
+    renderQueue();
+  }
+  function renderQueue(){
+    const q=state.queue;
+    const total=q.keys.length;
+    const processed=Math.min(q.index,total);
+    const pct=total?Math.round(processed/total*100):0;
+    const current=q.current?item(q.current):null;
+    $('#queueProgressText').textContent=`${processed} / ${total}`;
+    $('#queuePct').textContent=`${pct}%`;
+    $('#queueProgressBar').style.width=`${pct}%`;
+    $('#queueRemaining').textContent=Math.max(0,total-processed);
+    $('#queueDone').textContent=q.done||0;
+    $('#queueOffers').textContent=q.offers||0;
+    $('#queueErrors').textContent=q.errors||0;
+    $('#queueStatusBadge').textContent=q.status==='running'?'Läuft':q.status==='paused'?'Pausiert':q.status==='complete'?'Fertig':'Bereit';
+    $('#queueCurrent').textContent=current?`Aktuell: ${current.title}`:q.status==='complete'?'Suchlauf abgeschlossen':'Noch nicht gestartet';
+    const upcoming=q.keys.slice(q.index,q.index+8).map(item).filter(Boolean);
+    $('#queuePreview').innerHTML=upcoming.length?upcoming.map((x,i)=>`<article class="queue-row"><span>${i===0&&q.status==='running'?'Jetzt':'Danach'}</span><strong>${escapeHtml(x.title)}</strong><small>${seriesLabel[x.series]} #${String(x.number).padStart(2,'0')}${state.wishlist.includes(x.key)?' · Wunschliste':''}</small></article>`).join(''):'<p class="empty">Keine offenen Einträge in der Warteschlange.</p>';
+    $('#queueStart').disabled=q.status==='running';
+    $('#queuePause').disabled=q.status!=='running';
+    $('#queueResume').disabled=!(q.status==='paused'&&q.index<total);
+  }
+  async function queueLoop(){
+    if(queueLoopActive || state.queue.status!=='running') return;
+    queueLoopActive=true;
+    try {
+      while(state.queue.status==='running' && state.queue.index<state.queue.keys.length){
+        const key=state.queue.keys[state.queue.index];
+        const cartridge=item(key);
+        if(!cartridge || state.owned.includes(key)){
+          state.queue.index+=1; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue(); continue;
+        }
+        state.queue.current=key; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
+        log('info','queue.item.start',{index:state.queue.index+1,total:state.queue.keys.length,key,title:cartridge.title});
+        queueController=new AbortController();
+        try{
+          const result=await searchClient.search(cartridge,{signal:queueController.signal});
+          if(state.queue.status!=='running') break;
+          const offers=result.automatic||[];
+          state.searches[key]={checkedAt:result.checkedAt,offers:offers.slice(0,20),status:result.status};
+          state.queue.offers+=offers.length;
+          state.queue.done+=1;
+          log('info','queue.item.complete',{key,title:cartridge.title,offers:offers.length,index:state.queue.index+1,total:state.queue.keys.length});
+        }catch(error){
+          if(error?.name==='AbortError'){
+            log('info','queue.item.aborted',{key,title:cartridge.title});
+            break;
+          }
+          state.queue.errors+=1;
+          state.queue.done+=1;
+          log('error','queue.item.error',{key,title:cartridge.title,message:error.message});
+        }
+        state.queue.index+=1;
+        state.queue.current=null;
+        state.queue.updatedAt=new Date().toISOString();
+        save(); renderQueue();
+        await new Promise(resolve=>setTimeout(resolve,350));
+      }
+      if(state.queue.status==='running' && state.queue.index>=state.queue.keys.length){
+        state.queue.status='complete'; state.queue.current=null; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
+        log('info','queue.complete',{total:state.queue.keys.length,done:state.queue.done,offers:state.queue.offers,errors:state.queue.errors});
+      }
+    } finally { queueLoopActive=false; queueController=null; }
+  }
+  function startQueue(){
+    if(!searchClient){ log('error','queue.start.failed',{reason:'search client unavailable'}); return; }
+    createQueue();
+    state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
+    log('info','queue.started',{total:state.queue.keys.length});
+    queueLoop();
+  }
+  function pauseQueue(){
+    if(state.queue.status!=='running') return;
+    state.queue.status='paused'; state.queue.updatedAt=new Date().toISOString(); save();
+    queueController?.abort(); renderQueue();
+    log('info','queue.paused',{index:state.queue.index,total:state.queue.keys.length});
+  }
+  function resumeQueue(){
+    if(state.queue.status!=='paused' || state.queue.index>=state.queue.keys.length) return;
+    state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
+    log('info','queue.resumed',{index:state.queue.index,total:state.queue.keys.length});
+    queueLoop();
+  }
+  function resetQueue(){
+    queueController?.abort(); state.queue=emptyQueue(); save(); renderQueue(); log('info','queue.reset');
+  }
+  function restoreQueue(){
+    if(state.queue.status==='running'){
+      state.queue.status='paused'; state.queue.current=null; state.queue.updatedAt=new Date().toISOString(); save();
+      log('info','queue.restored',{index:state.queue.index,total:state.queue.keys.length});
+      setTimeout(resumeQueue,800);
+    }
+    renderQueue();
+  }
+
   function showView(name){ $$('.view').forEach(v=>v.hidden=v.id!==`${name}View`); $$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===name)); }
-  function renderAll(){ stats(); renderCollection(); renderCatalog(); renderMissing(); renderWishlist(); populateDealSelect(); }
+  function renderAll(){ stats(); renderCollection(); renderCatalog(); renderMissing(); renderWishlist(); populateDealSelect(); renderQueue(); }
   function toggleOwned(key){ state.owned=state.owned.includes(key)?state.owned.filter(k=>k!==key):[...state.owned,key]; save(); renderAll(); }
   function toggleWish(key){ state.wishlist=state.wishlist.includes(key)?state.wishlist.filter(k=>k!==key):[...state.wishlist,key]; save(); renderAll(); }
   function openDetail(key){
@@ -74,11 +189,12 @@
   function bind(){
     document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return; if(b.dataset.own)toggleOwned(b.dataset.own); if(b.dataset.wish)toggleWish(b.dataset.wish); if(b.dataset.detail)openDetail(b.dataset.detail); if(b.dataset.deal)runDealSearch(b.dataset.deal); if(b.dataset.view)showView(b.dataset.view); });
     $('#catalogSearch').addEventListener('input',renderCatalog); $('#seriesFilter').addEventListener('change',renderCatalog); $('#runDealSearch').addEventListener('click',()=>runDealSearch());
+    $('#queueStart').addEventListener('click',startQueue); $('#queuePause').addEventListener('click',pauseQueue); $('#queueResume').addEventListener('click',resumeQueue); $('#queueReset').addEventListener('click',resetQueue);
     $('#dealCartridge').addEventListener('change',()=>{ const x=item($('#dealCartridge').value); if(x) $('#directSources').innerHTML=searchClient.directSearches(x).map(source=>`<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name)}<span>↗</span></a>`).join(''); });
     $('#detailForm').addEventListener('submit',e=>{e.preventDefault(); const key=$('#detailDialog').dataset.key; state.owned=$('#detailOwned').checked?[...new Set([...state.owned,key])]:state.owned.filter(k=>k!==key); state.wishlist=$('#detailWish').checked?[...new Set([...state.wishlist,key])]:state.wishlist.filter(k=>k!==key); const p=parseFloat($('#detailPrice').value); if(Number.isFinite(p))state.prices[key]=p; else delete state.prices[key]; state.notes[key]=$('#detailNotes').value.trim(); save(); $('#detailDialog').close(); renderAll();});
     $('#exportData').addEventListener('click',()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'})); a.download='evercade-next-backup.json'; a.click(); URL.revokeObjectURL(a.href); });
-    $('#importData').addEventListener('change',async e=>{ try{ state={...state,...JSON.parse(await e.target.files[0].text())}; save(); renderAll(); }catch{ alert('Die Datei konnte nicht importiert werden.'); } });
+    $('#importData').addEventListener('change',async e=>{ try{ state={...state,...JSON.parse(await e.target.files[0].text())}; if(!state.queue)state.queue=emptyQueue(); save(); renderAll(); }catch{ alert('Die Datei konnte nicht importiert werden.'); } });
   }
-  applyVersion(); bind(); renderAll();
+  applyVersion(); bind(); renderAll(); restoreQueue();
   const initial=item($('#dealCartridge').value); if(initial) $('#dealCartridge').dispatchEvent(new Event('change'));
 })();
