@@ -47,7 +47,8 @@ const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 if (!configSource.includes('generic-parser-module-v1')) throw new Error('GenericParser contract missing');
-if (!configSource.includes("genericParserExpectedVersion: '0.45.1'")) throw new Error('GenericParser 0.45.1 expectation missing');
+if (!configSource.includes("genericParserExpectedVersion: '0.45.2'")) throw new Error('GenericParser 0.45.2 expectation missing');
+if (!configSource.includes("genericParserExpectedBuild: 'gp-0452-20260807-4'")) throw new Error('GenericParser Build 4 reference missing');
 if (!configSource.includes('genericParserSearchPaths')) throw new Error('GenericParser endpoint paths missing');
 if (!configSource.includes('genericParserDiagnosticPaths')) throw new Error('GenericParser diagnostic paths missing');
 if (!configSource.includes('genericParserEndpointTests')) throw new Error('GenericParser endpoint test matrix missing');
@@ -57,15 +58,16 @@ for (const marker of ['GET /health','GET /version','GET /diagnostics','OPTIONS /
 if (!parserSource.includes("source:'auto'") && !parserSource.includes("source: 'auto'")) throw new Error('GenericParser live source request missing');
 if (!parserSource.includes('window.EvercadeSearch')) throw new Error('Search client export missing');
 for (const marker of ['x-request-id','requestId','timestamp','origin','userAgent','durationMs','status','hitCount','parser.request','parser.response','parser.failure']) {
-  if (!parserSource.includes(marker)) throw new Error(`1.4.5.1 parser observability marker missing: ${marker}`);
+  if (!parserSource.includes(marker)) throw new Error(`Parser observability marker missing: ${marker}`);
 }
 if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log export missing');
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
 if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics completion logging missing');
 for (const marker of ['Worker Health','Worker Version','Worker Diagnostics']) {
-  if (!debugSource.includes(marker)) throw new Error(`GenericParser 0.45.1 health diagnostic missing: ${marker}`);
+  if (!debugSource.includes(marker)) throw new Error(`GenericParser 0.45.2 health diagnostic missing: ${marker}`);
 }
 if (!debugSource.includes('config.genericParserExpectedVersion')) throw new Error('Worker version must be checked against expected GenericParser version');
+if (!debugSource.includes('config.genericParserExpectedBuild')) throw new Error('Worker build reference must be recorded in diagnostics');
 for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure','endpoint.test.matrix.complete','access-control-allow-origin']) {
   if (!endpointSource.includes(marker)) throw new Error(`Endpoint diagnostic marker missing: ${marker}`);
 }
@@ -79,8 +81,10 @@ const runtimeSource = appSource + configSource + parserSource + eventSource + de
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 if (String(release.phase) !== '5.2') throw new Error('Release phase must remain 5.2');
-if (release.integration !== 'GenericParser 0.45.1') throw new Error('Release must declare GenericParser 0.45.1 integration');
+if (release.integration !== 'GenericParser 0.45.2 Build 4') throw new Error('Release must declare GenericParser 0.45.2 Build 4 integration');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
-if (release.genericParser?.expectedVersion !== '0.45.1') throw new Error('Release metadata must target GenericParser 0.45.1');
+if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('Release metadata must target GenericParser 0.45.2');
+if (release.genericParser?.expectedBuild !== 'gp-0452-20260807-4') throw new Error('Release metadata must reference GenericParser Build 4');
+if (release.genericParser?.releaseCommit !== '9aaf8c7f770ce62106d664facfbb71d12e02d59b') throw new Error('Release metadata must reference the GenericParser 0.45.2 Build 4 release commit');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries and GenericParser 0.45.1 integration contract.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries and GenericParser 0.45.2 Build 4 integration.`);
