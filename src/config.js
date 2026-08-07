@@ -5,7 +5,7 @@ window.EVERCADE_CONFIG = Object.freeze({
   genericParserWorkerUrl: 'https://genericparser.f6yv7sgtgw.workers.dev',
   genericParserContract: 'generic-parser-module-v1',
   genericParserExpectedVersion: '0.45.2',
-  genericParserExpectedBuild: 'gp-0452-20260807-4',
+  genericParserExpectedBuild: 'gp-0452-20260807-6',
   genericParserSearchPaths: Object.freeze([
     '/api/module/search',
     '/api/search',
