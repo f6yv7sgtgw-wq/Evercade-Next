@@ -11,6 +11,13 @@
 <header class="topbar"><div><h1>Diagnose & Eventlog</h1><p>Project Evercade Next</p></div><a class="button" href="./">Zurück</a></header>
 <main>
   <section class="panel"><div class="section-head"><div><span class="eyebrow">Systemzustand</span><h2>Live-Prüfung</h2></div><button id="runChecks" class="primary">Erneut prüfen</button></div><div id="healthChecks" class="health-grid"></div></section>
+
+  <section class="panel"><div class="section-head"><div><span class="eyebrow">Phase 5.2</span><h2>GenericParser Endpunkt-Test</h2></div><button id="runAllEndpointTests" class="primary">Alle testen</button></div>
+    <p class="empty">Testet den Worker direkt aus demselben Browser wie Evercade. Damit werden HTTP-Erreichbarkeit, CORS, Antwortstatus und Antwortinhalt sichtbar.</p>
+    <div id="endpointTestButtons" class="endpoint-buttons"></div>
+    <div id="endpointTestResults" class="endpoint-results"></div>
+  </section>
+
   <section class="panel"><div class="section-head"><div><span class="eyebrow">Browseraktivität</span><h2>Eventlog</h2></div><div class="data-actions"><button id="downloadLog">Export</button><button id="clearLog">Leeren</button></div></div><div id="eventLog" class="log-list"></div></section>
 </main>
 <script src="src/config.js"></script>
