@@ -24,6 +24,7 @@ jobs:
           node-version: 22
       - run: node --check src/config.js
       - run: node --check src/catalog.js
+      - run: node --check src/parser-client.js
       - run: node --check src/app.js
       - run: node scripts/validate.mjs
       - uses: actions/upload-pages-artifact@v3
