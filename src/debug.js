@@ -33,6 +33,7 @@
 
   const workerUrl = path => `${config.genericParserWorkerUrl}${path}`;
   const bodyVersion = body => String(body?.version ?? body?.workerVersion ?? body?.data?.version ?? body?.data?.workerVersion ?? 'unbekannt');
+  const bodyBuild = body => String(body?.build ?? body?.buildId ?? body?.workerBuild ?? body?.data?.build ?? body?.data?.buildId ?? body?.data?.workerBuild ?? 'unbekannt');
   const bodyContract = body => String(body?.contract ?? body?.moduleContract ?? body?.workerContract ?? body?.data?.contract ?? body?.data?.moduleContract ?? 'unbekannt');
 
   async function runChecks() {
@@ -72,9 +73,11 @@
       check('Worker Version', async () => {
         const { data, response } = await fetchJson(workerUrl(paths.version), true);
         const version = bodyVersion(data);
+        const build = bodyBuild(data);
         if (version === 'unbekannt') throw new Error('Version fehlt in Antwort');
         if (version !== config.genericParserExpectedVersion) throw new Error(`Erwartet ${config.genericParserExpectedVersion}, erhalten ${version}`);
-        return `${version} · HTTP ${response.status}`;
+        const buildDetail = build === 'unbekannt' ? 'Build unbekannt' : build;
+        return `${version} · ${buildDetail} · HTTP ${response.status}`;
       }),
       check('Worker Diagnostics', async () => {
         const { data, response } = await fetchJson(workerUrl(paths.diagnostics), true);
@@ -94,6 +97,7 @@
       timestamp: new Date().toISOString(),
       workerUrl: config.genericParserWorkerUrl,
       expectedWorkerVersion: config.genericParserExpectedVersion,
+      expectedWorkerBuild: config.genericParserExpectedBuild,
       contract: config.genericParserContract,
       results
     });
