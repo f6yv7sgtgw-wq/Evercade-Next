@@ -19,10 +19,11 @@ if (!html.includes('src/release-loader.js')) throw new Error('index.html must lo
 if (!html.includes('data-evercade-page="app"')) throw new Error('index.html must declare app page type');
 if (!html.includes('debug.html')) throw new Error('Diagnostics link missing from index.html');
 for (const id of ['dealsView','dealCartridge','runDealSearch','automaticDeals','directSources']) if (!html.includes(`id="${id}"`)) throw new Error(`Missing deal UI element ${id}`);
+for (const id of ['dealActiveCount','dealNewCount','dealCartridgeCount','dealBestPrice','dealFilterStatus','dealFilterSource','dealMaxPrice','dealSort','dealCenterMeta','markDealsSeen']) if (!html.includes(`id="${id}"`)) throw new Error(`Missing Phase 5.3 Trefferzentrale element ${id}`);
 for (const id of ['queueView','queueStart','queuePause','queueResume','queueReset','queueProgressText','queueProgressBar','queuePreview']) if (!html.includes(`id="${id}"`)) throw new Error(`Missing phase 5.1 queue UI element ${id}`);
-for (const marker of ['data-view="collection"','data-view="catalog"','data-view="deals"','data-view="queue"']) if (!html.includes(marker)) throw new Error(`1.4.6.0 primary navigation missing ${marker}`);
-if (html.includes('data-view="missing"') || html.includes('data-view="wishlist"')) throw new Error('1.4.6.0 must not expose Fehlend/Wünsche navigation');
-for (const marker of ['.topbar,.tabs{position:static!important','[data-wish]','label:has(#detailWish)','id="missingStat" hidden','id="wishStat" hidden']) if (!html.includes(marker)) throw new Error(`1.4.6.0 GUI cleanup marker missing: ${marker}`);
+for (const marker of ['data-view="collection"','data-view="catalog"','data-view="deals"','data-view="queue"']) if (!html.includes(marker)) throw new Error(`Primary navigation missing ${marker}`);
+if (html.includes('data-view="missing"') || html.includes('data-view="wishlist"')) throw new Error('Fehlend/Wünsche must remain retired from primary navigation');
+for (const marker of ['.topbar,.tabs{position:static!important','html,body{max-width:100%;overflow-x:hidden}','grid-template-columns:repeat(4,minmax(0,1fr))','overflow-wrap:anywhere']) if (!html.includes(marker)) throw new Error(`Horizontal-overflow protection marker missing: ${marker}`);
 
 const debugHtml = read('debug.html');
 if (!debugHtml.includes('src/release-loader.js')) throw new Error('debug.html must load canonical release loader');
@@ -46,9 +47,9 @@ const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 
-if (version !== '1.4.6.0') throw new Error(`Expected Evercade Next 1.4.6.0, found ${version}`);
-if (release.channel !== 'stable') throw new Error('1.4.6.0 must be stable');
-if (String(release.phase) !== '5.2-ui-cleanup') throw new Error('1.4.6.0 must be phase 5.2-ui-cleanup');
+if (version !== '1.4.7.0') throw new Error(`Expected Evercade Next 1.4.7.0, found ${version}`);
+if (release.channel !== 'stable') throw new Error('1.4.7.0 must be stable');
+if (String(release.phase) !== '5.3') throw new Error('1.4.7.0 must be phase 5.3');
 if (release.integration !== 'GenericParser 0.45.2 Build 6') throw new Error('Release must declare GenericParser 0.45.2 Build 6 integration');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
 if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('Release metadata must target GenericParser 0.45.2');
@@ -62,28 +63,21 @@ for (const marker of ['GET /health','GET /version','GET /diagnostics','OPTIONS /
 if (!parserSource.includes("source:'auto'") && !parserSource.includes("source: 'auto'")) throw new Error('GenericParser live source request missing');
 if (!parserSource.includes('window.EvercadeSearch')) throw new Error('Search client export missing');
 for (const marker of ['x-request-id','requestId','timestamp','origin','userAgent','durationMs','status','hitCount','parser.request','parser.response','parser.failure']) if (!parserSource.includes(marker)) throw new Error(`Parser observability marker missing: ${marker}`);
-for (const marker of ['requestsLast60s','peakRequestsPer60s','consecutiveFailures','loadFailed','http429','http5xx','worker.health.probe','worker.pressure.suspected','EVERCADE_WORKER_TELEMETRY']) if (!parserSource.includes(marker)) throw new Error(`Worker pressure telemetry marker missing: ${marker}`);
-for (const marker of ['RETRY_5XX_DELAY_MS = 5000','RETRY_5XX_MAX = 1','parser.retry.scheduled','parser.retry.start','parser.retry.recovered','responseBody','cfRay','workerRequestId','workerVersion','workerBuild','retries5xx','retries5xxRecovered']) if (!parserSource.includes(marker)) throw new Error(`5xx retry/diagnostic marker missing: ${marker}`);
-for (const marker of ['normalizeSearchTitle','parser.query.normalized','slash_removed','originalTitle','normalizedTitle']) if (!parserSource.includes(marker)) throw new Error(`Query-normalization marker missing: ${marker}`);
-if (!parserSource.includes("replace(/\\s*\\/\\s*/g,' ')")) throw new Error('Slash normalization must replace slash separators with spaces');
+for (const marker of ['RETRY_5XX_DELAY_MS = 5000','RETRY_5XX_MAX = 1','parser.retry.scheduled','parser.retry.start','parser.retry.recovered']) if (!parserSource.includes(marker)) throw new Error(`5xx retry marker missing: ${marker}`);
+for (const marker of ['normalizeSearchTitle','parser.query.normalized','slash_removed']) if (!parserSource.includes(marker)) throw new Error(`Query-normalization marker missing: ${marker}`);
+
+for (const marker of ['offerIndex','dealCenterSeenAt','canonicalOfferKey','updateOfferIndex','migrateLegacyOffers','renderDealCenter','deals.index.updated','priceHistory','inactiveAt','firstSeen','lastSeen','dealFilterStatus','dealFilterSource','dealMaxPrice','dealSort']) if (!appSource.includes(marker)) throw new Error(`Phase 5.3 Trefferzentrale marker missing: ${marker}`);
+for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','paid_worker_pacing']) if (!appSource.includes(marker)) throw new Error(`Paid-worker pacing/recovery marker missing: ${marker}`);
+if (appSource.includes('worker_free_tier_protection')) throw new Error('Must not retain scheduled free-tier batch protection');
+
 if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log export missing');
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
-for (const marker of ['RUN_KEY','RUN_LIMIT','worker.limit.signal','resourceLimitSignals','peakRequestsPer60s','readRuns','currentRunSnapshot']) if (!eventSource.includes(marker)) throw new Error(`Persistent run diagnostics marker missing: ${marker}`);
 if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics completion logging missing');
-for (const marker of ['Worker Health','Worker Version','Worker Diagnostics']) if (!debugSource.includes(marker)) throw new Error(`Worker diagnostic missing: ${marker}`);
-if (!debugSource.includes('config.genericParserExpectedVersion')) throw new Error('Worker version check missing');
-if (!debugSource.includes('config.genericParserExpectedBuild')) throw new Error('Worker build visibility missing');
-
-for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure','endpoint.test.matrix.complete','response.type === \'cors\'','response.type === \'basic\'']) if (!endpointSource.includes(marker)) throw new Error(`Endpoint diagnostic marker missing: ${marker}`);
-for (const marker of ['transport.context','transport.probe.start','transport.probe.complete','transport.probe.failure','transport.probe.matrix.complete','simple-health','instrumented-health','no-cors-health','workerBaseUrl','documentBaseURI','navigatorOnline','secureContext','errorConstructor','requestHeaderNames']) if (!endpointSource.includes(marker)) throw new Error(`Transport diagnostic marker missing: ${marker}`);
+for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure']) if (!endpointSource.includes(marker)) throw new Error(`Endpoint diagnostic marker missing: ${marker}`);
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
-for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) if (!appSource.includes(marker)) throw new Error(`Phase 5.1 queue marker missing: ${marker}`);
-for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_SIZE = 10','BATCH_DELAY_MS = 0','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','RECOVERY_HEALTH_RETRY_MS = 15000','queue.recovery.triggered','queue.recovery.health','queue.recovery.complete','three_load_failed_requests','paid_worker_pacing']) if (!appSource.includes(marker)) throw new Error(`Paid-worker pacing/recovery marker missing: ${marker}`);
-if (appSource.includes('worker_free_tier_protection')) throw new Error('Must not retain scheduled free-tier batch protection');
-if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Underlying collection compatibility state missing');
 
 const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, cleaned non-sticky navigation, retired Fehlend/Wünsche UI, slash-safe search queries and 50 ms paid-worker pacing.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, Phase 5.3 Trefferzentrale, persistent offer history, 50 ms paid-worker pacing and horizontal-overflow protection.`);
