@@ -5,11 +5,13 @@
   const log = (level,event,details={}) => window.EVERCADE_LOG?.log(level,event,details);
   const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `ev-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const requestTimes = [];
+  const RETRY_5XX_DELAY_MS = 5000;
+  const RETRY_5XX_MAX = 1;
   const telemetry = {
     startedAt: new Date().toISOString(), requests:0, successes:0, failures:0, loadFailed:0,
     http429:0, http5xx:0, consecutiveFailures:0, maxConsecutiveFailures:0,
     lastSuccessAt:null, lastFailureAt:null, peakRequestsPer60s:0, lastHealthProbeAt:null,
-    healthProbes:0, healthProbeFailures:0
+    healthProbes:0, healthProbeFailures:0, retries5xx:0, retries5xxRecovered:0
   };
   let healthProbePromise = null;
 
@@ -72,6 +74,22 @@
     };
   }
 
+  function waitWithSignal(ms, signal) {
+    return new Promise((resolve,reject) => {
+      if (signal?.aborted) return reject(new DOMException('Aborted','AbortError'));
+      const timer = setTimeout(() => {
+        signal?.removeEventListener?.('abort',onAbort);
+        resolve();
+      },ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener?.('abort',onAbort);
+        reject(new DOMException('Aborted','AbortError'));
+      };
+      signal?.addEventListener?.('abort',onAbort,{once:true});
+    });
+  }
+
   async function probeWorkerHealth(reason='failure-streak') {
     const since = telemetry.lastHealthProbeAt ? Date.now() - new Date(telemetry.lastHealthProbeAt).getTime() : Infinity;
     if (healthProbePromise || since < 15000) return healthProbePromise;
@@ -109,7 +127,7 @@
     return healthProbePromise;
   }
 
-  async function requestJson(url, { method='GET', body=null, signal } = {}) {
+  async function requestJson(url, { method='GET', body=null, signal, attempt=0 } = {}) {
     const requestId = makeRequestId();
     const started = performance.now();
     const route = new URL(url).pathname;
@@ -133,6 +151,7 @@
       userAgent: navigator.userAgent,
       query: body?.query,
       source: body?.source,
+      attempt,
       requestsLast60s:requestRate,
       totalRequests:telemetry.requests
     };
@@ -145,6 +164,10 @@
       try { data = text ? JSON.parse(text) : {}; }
       catch { throw new Error(`Ungültige JSON-Antwort (HTTP ${response.status})`); }
       const hitCount = collectListings(data).length;
+      const cfRay = response.headers.get('cf-ray') || null;
+      const workerRequestId = response.headers.get('x-request-id') || cfRay || null;
+      const workerVersion = response.headers.get('x-genericparser-version') || null;
+      const workerBuild = response.headers.get('x-genericparser-build') || null;
       if (response.ok) {
         telemetry.successes += 1;
         telemetry.consecutiveFailures = 0;
@@ -162,11 +185,12 @@
         durationMs,
         status:response.status,
         hitCount,
-        workerRequestId:response.headers.get('x-request-id') || response.headers.get('cf-ray') || null,
-        cfRay:response.headers.get('cf-ray') || null,
+        workerRequestId,
+        cfRay,
         contentType:response.headers.get('content-type') || null,
-        workerVersion:response.headers.get('x-genericparser-version') || null,
-        workerBuild:response.headers.get('x-genericparser-build') || null,
+        workerVersion,
+        workerBuild,
+        responseBody:response.status >= 500 ? data : undefined,
         telemetry:snapshot()
       });
       if (!response.ok) {
@@ -174,6 +198,10 @@
         const error = new Error(typeof message === 'string' ? message : `HTTP ${response.status}`);
         error.status = response.status;
         error.response = data;
+        error.cfRay = cfRay;
+        error.workerRequestId = workerRequestId;
+        error.workerVersion = workerVersion;
+        error.workerBuild = workerBuild;
         throw error;
       }
       return data;
@@ -195,13 +223,18 @@
         errorName:error?.name || null,
         errorConstructor:error?.constructor?.name || null,
         stack:error?.stack || null,
+        cfRay:error?.cfRay || null,
+        workerRequestId:error?.workerRequestId || null,
+        workerVersion:error?.workerVersion || null,
+        workerBuild:error?.workerBuild || null,
+        responseBody:status >= 500 ? (error?.response ?? null) : undefined,
         telemetry:snapshot()
       };
       log(isAbort?'info':'error','parser.failure',details);
       if (!isAbort && telemetry.consecutiveFailures >= 3) {
         log('warn','worker.pressure.suspected',{
           reason:'three_or_more_consecutive_parser_failures',
-          note:'Possible Cloudflare Free Worker pressure/resource exhaustion. This is a diagnostic inference, not proof.',
+          note:'Possible Worker pressure/resource exhaustion. This is a diagnostic inference, not proof.',
           telemetry:snapshot({route,status,message:details.message})
         });
         probeWorkerHealth('consecutive-parser-failures');
@@ -211,7 +244,40 @@
   }
 
   async function postJson(url, body, signal) {
-    return requestJson(url,{method:'POST',body,signal});
+    const route = new URL(url).pathname;
+    for (let attempt=0; attempt<=RETRY_5XX_MAX; attempt+=1) {
+      try {
+        const data = await requestJson(url,{method:'POST',body,signal,attempt});
+        if (attempt > 0) {
+          telemetry.retries5xxRecovered += 1;
+          log('info','parser.retry.recovered',{route,attempt,query:body?.query,telemetry:snapshot()});
+        }
+        return data;
+      } catch(error) {
+        if (error?.name === 'AbortError') throw error;
+        const status = Number(error?.status || 0) || null;
+        const retryable = status != null && status >= 500 && status <= 599 && attempt < RETRY_5XX_MAX;
+        if (!retryable) throw error;
+        telemetry.retries5xx += 1;
+        log('warn','parser.retry.scheduled',{
+          route,
+          query:body?.query,
+          status,
+          attempt:attempt+1,
+          maxRetries:RETRY_5XX_MAX,
+          delayMs:RETRY_5XX_DELAY_MS,
+          cfRay:error?.cfRay || null,
+          workerRequestId:error?.workerRequestId || null,
+          workerVersion:error?.workerVersion || null,
+          workerBuild:error?.workerBuild || null,
+          responseBody:error?.response ?? null,
+          telemetry:snapshot()
+        });
+        await waitWithSignal(RETRY_5XX_DELAY_MS,signal);
+        log('info','parser.retry.start',{route,query:body?.query,attempt:attempt+1,telemetry:snapshot()});
+      }
+    }
+    throw new Error('Retry loop exhausted');
   }
 
   async function searchKleinanzeigen(item, options = {}) {
