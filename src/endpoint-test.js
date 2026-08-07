@@ -5,6 +5,7 @@
   const $ = selector => document.querySelector(selector);
   const results = new Map();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `diag-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const payload = () => ({
     contract: config.genericParserContract,
@@ -22,6 +23,17 @@
     sort_by: 'relevance'
   });
 
+  function corsSummary(headers) {
+    const wanted = config.genericParserCorsHeaders || [];
+    return Object.fromEntries(wanted.map(name => [name, headers[name] || null]));
+  }
+
+  function corsOk(def, headers) {
+    if (def.kind !== 'cors' && def.method === 'GET') return true;
+    const origin = headers['access-control-allow-origin'];
+    return origin === '*' || origin === location.origin;
+  }
+
   function render() {
     const defs = config.genericParserEndpointTests || [];
     $('#endpointTestResults').innerHTML = defs.map(def => {
@@ -34,47 +46,76 @@
 
   async function run(def) {
     const url = `${config.genericParserWorkerUrl}${def.path}`;
+    const requestId = makeRequestId();
     const started = performance.now();
-    const options = { method: def.method, cache: 'no-store', headers: { accept: 'application/json' } };
+    const options = {
+      method: def.method,
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        'x-generic-parser-contract': config.genericParserContract,
+        'x-request-id': requestId
+      }
+    };
     if (def.method === 'POST') {
       options.headers['content-type'] = 'application/json';
-      options.headers['x-generic-parser-contract'] = config.genericParserContract;
       options.body = JSON.stringify(payload());
     }
-    log('info', 'endpoint.test.start', { id: def.id, method: def.method, url });
+    if (def.method === 'OPTIONS') {
+      options.headers['access-control-request-method'] = 'POST';
+      options.headers['access-control-request-headers'] = 'content-type,x-generic-parser-contract,x-request-id';
+    }
+    log('info', 'endpoint.test.start', { id: def.id, requestId, method: def.method, url, origin: location.origin, userAgent: navigator.userAgent });
     try {
       const response = await fetch(url, options);
       const bodyText = await response.text();
       const headers = {};
-      for (const [name, value] of response.headers.entries()) headers[name] = value;
+      for (const [name, value] of response.headers.entries()) headers[name.toLowerCase()] = value;
       let body = bodyText.slice(0, 6000);
-      try { body = JSON.parse(bodyText); } catch {}
+      try { body = bodyText ? JSON.parse(bodyText) : {}; } catch {}
+      const cors = corsSummary(headers);
+      const corsPassed = corsOk(def, headers);
+      const ok = response.ok && corsPassed;
+      const diagnosis = !response.ok
+        ? `Worker erreichbar, antwortet aber mit HTTP ${response.status}.`
+        : !corsPassed
+          ? 'HTTP-Antwort erhalten, aber Access-Control-Allow-Origin fehlt oder erlaubt den Evercade-Origin nicht.'
+          : def.kind === 'cors'
+            ? 'OPTIONS-/Preflight-Antwort ist browserkompatibel.'
+            : 'Browserzugriff funktioniert für diesen Endpunkt.';
       const result = {
         id: def.id,
         label: def.label,
+        requestId,
+        workerRequestId: response.headers.get('x-request-id') || response.headers.get('cf-ray') || null,
         url,
-        ok: response.ok,
+        method: def.method,
+        ok,
         status: response.status,
         statusLabel: `HTTP ${response.status}`,
         responseType: response.type,
         durationMs: Math.round(performance.now() - started),
+        cors,
         headers,
         body,
-        diagnosis: response.ok ? 'Browserzugriff funktioniert für diesen Endpunkt.' : `Worker erreichbar, antwortet aber mit HTTP ${response.status}.`
+        diagnosis
       };
       results.set(def.id, result);
-      log(response.ok ? 'info' : 'error', 'endpoint.test.complete', result);
+      log(ok ? 'info' : 'error', 'endpoint.test.complete', result);
       render();
       return result;
     } catch (error) {
       const result = {
         id: def.id,
         label: def.label,
+        requestId,
         url,
+        method: def.method,
         ok: false,
         statusLabel: 'Load failed',
         durationMs: Math.round(performance.now() - started),
         error: String(error.message || error),
+        stack: error?.stack || null,
         diagnosis: 'Browser konnte keine auswertbare Antwort erhalten. CORS/Preflight, Worker-Route oder Worker-Verfügbarkeit prüfen.'
       };
       results.set(def.id, result);
@@ -92,10 +133,12 @@
     try {
       for (const def of config.genericParserEndpointTests || []) await run(def);
       const all = [...results.values()];
-      log(all.some(r => r.ok) ? 'info' : 'error', 'endpoint.test.matrix.complete', {
+      log(all.every(r => r.ok) ? 'info' : 'error', 'endpoint.test.matrix.complete', {
         tested: all.length,
         successful: all.filter(r => r.ok).map(r => r.label),
-        failed: all.filter(r => !r.ok).map(r => r.label)
+        failed: all.filter(r => !r.ok).map(r => r.label),
+        expectedWorkerVersion: config.genericParserExpectedVersion,
+        contract: config.genericParserContract
       });
     } finally {
       button.disabled = false;
