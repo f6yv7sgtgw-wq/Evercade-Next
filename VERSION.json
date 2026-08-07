@@ -1,13 +1,13 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.5.3",
-  "displayVersion": "1.4.5.3",
-  "channel": "stable",
+  "version": "1.4.5.4",
+  "displayVersion": "1.4.5.4",
+  "channel": "diagnostic",
   "releaseDate": "2026-08-07",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
-  "phase": "5.2",
+  "phase": "5.2-diagnostic",
   "integration": "GenericParser 0.45.2 Build 4",
   "genericParser": {
     "expectedVersion": "0.45.2",
@@ -16,31 +16,28 @@
     "contract": "generic-parser-module-v1",
     "workerUrl": "https://genericparser.f6yv7sgtgw.workers.dev"
   },
+  "diagnosticOnly": true,
   "features": [
+    "No search-runtime behavior changes",
     "Persistent browser event log",
     "Dedicated diagnostics page",
-    "GenericParser Kleinanzeigen integration",
-    "Full-search queue for all missing cartridges",
-    "Wishlist-first queue prioritization",
-    "Pause resume and reset controls",
-    "Persistent per-cartridge queue progress",
-    "Central GenericParser endpoint configuration",
-    "GET health version and diagnostics checks",
-    "GenericParser 0.45.2 compatibility verification",
-    "GenericParser Build 4 visibility without hard build pinning",
     "Version-aware JavaScript asset loading",
-    "Automatic release cache busting from VERSION.json",
-    "POST search api/search and api/module/search compatibility",
-    "Browser OPTIONS and CORS preflight diagnostics",
-    "Per-request request IDs and timestamps",
-    "Route method origin user-agent duration status and hit-count logging",
-    "Consistent JSON response handling with legacy listing compatibility",
-    "Unchanged generic-parser-module-v1 search contract"
+    "GenericParser 0.45.2 Build 4 reference",
+    "Browser transport context capture",
+    "Simple cross-origin GET probe without custom headers",
+    "Instrumented GET probe with Evercade custom headers",
+    "No-CORS transport probe",
+    "Request option and header-name logging",
+    "JavaScript error name constructor cause and stack logging",
+    "Full worker URL origin href baseURI referrer and online-state logging",
+    "Existing endpoint matrix retained"
   ],
   "nonGoals": [
+    "Search runtime changes",
     "New search sources",
     "Multi-source search",
     "Ranking changes",
-    "Price scoring changes"
+    "Price scoring changes",
+    "GenericParser worker changes"
   ]
 }
