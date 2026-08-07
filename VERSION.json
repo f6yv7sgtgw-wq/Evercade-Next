@@ -1,43 +1,37 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.5.4",
-  "displayVersion": "1.4.5.4",
-  "channel": "diagnostic",
+  "version": "1.4.5.5",
+  "displayVersion": "1.4.5.5",
+  "channel": "stable",
   "releaseDate": "2026-08-07",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
-  "phase": "5.2-diagnostic",
-  "integration": "GenericParser 0.45.2 Build 4",
+  "phase": "5.2",
+  "integration": "GenericParser 0.45.2 Build 6",
   "genericParser": {
     "expectedVersion": "0.45.2",
-    "expectedBuild": "gp-0452-20260807-4",
-    "releaseCommit": "9aaf8c7f770ce62106d664facfbb71d12e02d59b",
+    "expectedBuild": "gp-0452-20260807-6",
     "contract": "generic-parser-module-v1",
     "workerUrl": "https://genericparser.f6yv7sgtgw.workers.dev"
   },
-  "diagnosticOnly": true,
   "features": [
-    "No search-runtime behavior changes",
     "Persistent browser event log",
     "Dedicated diagnostics page",
     "Version-aware JavaScript asset loading",
-    "GenericParser 0.45.2 Build 4 reference",
-    "Browser transport context capture",
-    "Simple cross-origin GET probe without custom headers",
-    "Instrumented GET probe with Evercade custom headers",
-    "No-CORS transport probe",
-    "Request option and header-name logging",
-    "JavaScript error name constructor cause and stack logging",
-    "Full worker URL origin href baseURI referrer and online-state logging",
-    "Existing endpoint matrix retained"
+    "GenericParser 0.45.2 Build 6 integration",
+    "Worker-edge browser CORS preflight support",
+    "Evercade flat-payload compatibility on /api/module/search",
+    "Canonical generic-parser-module-v1 contract retained",
+    "Correct browser-readable CORS endpoint diagnostics",
+    "Full-search queue for all missing cartridges",
+    "Wishlist-first queue prioritization",
+    "Pause resume and reset controls"
   ],
   "nonGoals": [
-    "Search runtime changes",
     "New search sources",
     "Multi-source search",
     "Ranking changes",
-    "Price scoring changes",
-    "GenericParser worker changes"
+    "Price scoring changes"
   ]
 }
