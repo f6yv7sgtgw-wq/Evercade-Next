@@ -1,13 +1,13 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.5.9",
-  "displayVersion": "1.4.5.9",
+  "version": "1.4.6.0",
+  "displayVersion": "1.4.6.0",
   "channel": "stable",
   "releaseDate": "2026-08-08",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
-  "phase": "5.2",
+  "phase": "5.2-ui-cleanup",
   "integration": "GenericParser 0.45.2 Build 6",
   "genericParser": {
     "expectedVersion": "0.45.2",
@@ -16,30 +16,23 @@
     "workerUrl": "https://genericparser.f6yv7sgtgw.workers.dev"
   },
   "features": [
-    "Persistent browser event log with extended retention",
-    "Compact diagnostics history for full-search runs",
-    "Rolling request-rate telemetry",
-    "Consecutive failure and Load failed tracking",
-    "Automatic Worker health probe after repeated failures",
-    "HTTP status counters",
-    "Per-route request and failure counters",
+    "Non-sticky header and navigation so controls no longer hang over scrolled content",
+    "Visible navigation reduced to Sammlung, Katalog, Deals and Vollsuche",
+    "Fehlend and Wünsche removed from the visible GUI",
+    "Collection summary reduced to Sammlung and Kaufwert",
+    "Wishlist controls retired from visible cards and detail dialog",
+    "Full-search wording simplified to catalog-order processing",
     "50 ms delay between full-search cartridges",
-    "Scheduled batch pauses disabled for paid Worker operation",
-    "Emergency 60 second recovery remains available after three consecutive Load failed requests",
     "Single automatic retry after 5 seconds for HTTP 5xx responses",
-    "Detailed 5xx diagnostics including response body, request IDs, CF-Ray, Worker version and build",
     "Slash normalization in GenericParser search queries while preserving original cartridge titles",
-    "Query normalization telemetry",
-    "Dedicated diagnostics page",
-    "Version-aware JavaScript asset loading",
-    "GenericParser 0.45.2 Build 6 integration",
-    "Full-search queue for all missing cartridges"
+    "Persistent diagnostics and Worker telemetry",
+    "GenericParser 0.45.2 Build 6 integration"
   ],
   "nonGoals": [
+    "Changing the collection data model",
+    "Changing GenericParser search runtime",
     "New search sources",
-    "Multi-source search",
     "Ranking changes",
-    "Price scoring changes",
-    "Changing GenericParser search runtime"
+    "Price scoring changes"
   ]
 }
