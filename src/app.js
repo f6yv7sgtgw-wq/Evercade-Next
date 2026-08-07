@@ -17,9 +17,9 @@
   let queueController = null;
   let queueLoopActive = false;
   let consecutiveLoadFailures = 0;
-  const QUEUE_DELAY_MS = 1500;
+  const QUEUE_DELAY_MS = 200;
   const BATCH_SIZE = 10;
-  const BATCH_DELAY_MS = 30000;
+  const BATCH_DELAY_MS = 0;
   const RECOVERY_FAILURE_THRESHOLD = 3;
   const RECOVERY_DELAY_MS = 60000;
   const RECOVERY_HEALTH_RETRY_MS = 15000;
@@ -121,10 +121,7 @@
     log('info',`${eventPrefix}.end`,{...details,delayMs,actualDelayMs:Math.round(performance.now()-started)});
   }
   async function queueDelay(cartridge,index,total){
-    return timedQueuePause('queue.delay',QUEUE_DELAY_MS,{key:cartridge.key,title:cartridge.title,index,total,reason:'rate_limit_protection'});
-  }
-  async function batchPause(index,total){
-    return timedQueuePause('queue.batch.pause',BATCH_DELAY_MS,{index,total,batchSize:BATCH_SIZE,reason:'worker_free_tier_protection'});
+    return timedQueuePause('queue.delay',QUEUE_DELAY_MS,{key:cartridge.key,title:cartridge.title,index,total,reason:'paid_worker_pacing'});
   }
   async function workerHealthCheck(){
     const requestId=globalThis.crypto?.randomUUID?.() || `recovery-${Date.now()}`;
@@ -197,9 +194,6 @@
         if(consecutiveLoadFailures>=RECOVERY_FAILURE_THRESHOLD){
           const recovered=await recoveryPause(state.queue.index,state.queue.keys.length);
           if(!recovered) break;
-        }
-        if(state.queue.status==='running' && state.queue.index%BATCH_SIZE===0){
-          await batchPause(state.queue.index,state.queue.keys.length);
         }
         if(state.queue.status==='running'){
           await queueDelay(cartridge,state.queue.index,state.queue.keys.length);
