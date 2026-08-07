@@ -43,9 +43,9 @@ const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 
-if (version !== '1.4.5.8') throw new Error(`Expected Evercade Next 1.4.5.8, found ${version}`);
-if (release.channel !== 'stable') throw new Error('1.4.5.8 must be stable');
-if (String(release.phase) !== '5.2') throw new Error('1.4.5.8 must be phase 5.2');
+if (version !== '1.4.5.9') throw new Error(`Expected Evercade Next 1.4.5.9, found ${version}`);
+if (release.channel !== 'stable') throw new Error('1.4.5.9 must be stable');
+if (String(release.phase) !== '5.2') throw new Error('1.4.5.9 must be phase 5.2');
 if (release.integration !== 'GenericParser 0.45.2 Build 6') throw new Error('Release must declare GenericParser 0.45.2 Build 6 integration');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
 if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('Release metadata must target GenericParser 0.45.2');
@@ -60,7 +60,9 @@ if (!parserSource.includes("source:'auto'") && !parserSource.includes("source: '
 if (!parserSource.includes('window.EvercadeSearch')) throw new Error('Search client export missing');
 for (const marker of ['x-request-id','requestId','timestamp','origin','userAgent','durationMs','status','hitCount','parser.request','parser.response','parser.failure']) if (!parserSource.includes(marker)) throw new Error(`Parser observability marker missing: ${marker}`);
 for (const marker of ['requestsLast60s','peakRequestsPer60s','consecutiveFailures','loadFailed','http429','http5xx','worker.health.probe','worker.pressure.suspected','EVERCADE_WORKER_TELEMETRY']) if (!parserSource.includes(marker)) throw new Error(`Worker pressure telemetry marker missing: ${marker}`);
-for (const marker of ['RETRY_5XX_DELAY_MS = 5000','RETRY_5XX_MAX = 1','parser.retry.scheduled','parser.retry.start','parser.retry.recovered','responseBody','cfRay','workerRequestId','workerVersion','workerBuild','retries5xx','retries5xxRecovered']) if (!parserSource.includes(marker)) throw new Error(`1.4.5.8 5xx retry/diagnostic marker missing: ${marker}`);
+for (const marker of ['RETRY_5XX_DELAY_MS = 5000','RETRY_5XX_MAX = 1','parser.retry.scheduled','parser.retry.start','parser.retry.recovered','responseBody','cfRay','workerRequestId','workerVersion','workerBuild','retries5xx','retries5xxRecovered']) if (!parserSource.includes(marker)) throw new Error(`5xx retry/diagnostic marker missing: ${marker}`);
+for (const marker of ['normalizeSearchTitle','parser.query.normalized','slash_removed','originalTitle','normalizedTitle']) if (!parserSource.includes(marker)) throw new Error(`1.4.5.9 query-normalization marker missing: ${marker}`);
+if (!parserSource.includes("replace(/\\s*\\/\\s*/g,' ')")) throw new Error('Slash normalization must replace slash separators with spaces');
 if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log export missing');
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
 for (const marker of ['RUN_KEY','RUN_LIMIT','worker.limit.signal','resourceLimitSignals','peakRequestsPer60s','readRuns','currentRunSnapshot']) if (!eventSource.includes(marker)) throw new Error(`Persistent run diagnostics marker missing: ${marker}`);
@@ -73,12 +75,12 @@ for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.t
 for (const marker of ['transport.context','transport.probe.start','transport.probe.complete','transport.probe.failure','transport.probe.matrix.complete','simple-health','instrumented-health','no-cors-health','workerBaseUrl','documentBaseURI','navigatorOnline','secureContext','errorConstructor','requestHeaderNames']) if (!endpointSource.includes(marker)) throw new Error(`Transport diagnostic marker missing: ${marker}`);
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
 for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) if (!appSource.includes(marker)) throw new Error(`Phase 5.1 queue marker missing: ${marker}`);
-for (const marker of ['QUEUE_DELAY_MS = 200','BATCH_SIZE = 10','BATCH_DELAY_MS = 0','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','RECOVERY_HEALTH_RETRY_MS = 15000','queue.recovery.triggered','queue.recovery.health','queue.recovery.complete','three_load_failed_requests','paid_worker_pacing']) if (!appSource.includes(marker)) throw new Error(`1.4.5.8 paid-worker pacing/recovery marker missing: ${marker}`);
-if (appSource.includes('worker_free_tier_protection')) throw new Error('1.4.5.8 must not retain scheduled free-tier batch protection');
+for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_SIZE = 10','BATCH_DELAY_MS = 0','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','RECOVERY_HEALTH_RETRY_MS = 15000','queue.recovery.triggered','queue.recovery.health','queue.recovery.complete','three_load_failed_requests','paid_worker_pacing']) if (!appSource.includes(marker)) throw new Error(`1.4.5.9 paid-worker pacing/recovery marker missing: ${marker}`);
+if (appSource.includes('worker_free_tier_protection')) throw new Error('1.4.5.9 must not retain scheduled free-tier batch protection');
 if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Queue priority or missing-cartridge filter is not connected to collection state');
 
 const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, GenericParser Build 6, 200 ms paid-worker pacing, no scheduled batch pause, emergency recovery and one 5-second HTTP 5xx retry.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, GenericParser Build 6, slash-safe search queries, 50 ms paid-worker pacing, emergency recovery and one 5-second HTTP 5xx retry.`);
