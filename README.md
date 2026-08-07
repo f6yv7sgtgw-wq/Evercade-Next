@@ -36,4 +36,6 @@ node scripts/validate.mjs
 
 Der kanonische Workflow `.github/workflows/pages.yml` veröffentlicht ausschließlich den geprüften Stand von `main` als GitHub-Pages-Artefakt.
 
-Geplante URL: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/`
+GitHub Pages ist auf **GitHub Actions** als Veröffentlichungsquelle eingestellt.
+
+URL: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/`
