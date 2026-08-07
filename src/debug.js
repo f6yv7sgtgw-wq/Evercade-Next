@@ -41,7 +41,7 @@
     const results = await Promise.all([
       check('VERSION.json', async () => {
         const { data } = await fetchJson('VERSION.json');
-        if (!/^\d+\.\d+\.\d+$/.test(data.version)) throw new Error('Ungültige Version');
+        if (!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(data.version)) throw new Error('Ungültige Version');
         return data.version;
       }),
       check('Konfiguration', async () => {
@@ -73,6 +73,7 @@
         const { data, response } = await fetchJson(workerUrl(paths.version), true);
         const version = bodyVersion(data);
         if (version === 'unbekannt') throw new Error('Version fehlt in Antwort');
+        if (version !== config.genericParserExpectedVersion) throw new Error(`Erwartet ${config.genericParserExpectedVersion}, erhalten ${version}`);
         return `${version} · HTTP ${response.status}`;
       }),
       check('Worker Diagnostics', async () => {
