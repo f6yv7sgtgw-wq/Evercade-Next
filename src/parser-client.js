@@ -3,6 +3,7 @@
 
   const config = window.EVERCADE_CONFIG;
   const log = (level,event,details={}) => window.EVERCADE_LOG?.log(level,event,details);
+  const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `ev-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const safeNumber = value => {
     const number = Number(value);
@@ -34,23 +35,78 @@
   }
 
   function collectListings(payload) {
-    const candidates = [payload?.listings,payload?.results,payload?.items,payload?.data?.listings,payload?.data?.results,payload?.data?.items,payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])];
+    const candidates = [
+      payload?.listings,payload?.results,payload?.items,
+      payload?.data?.listings,payload?.data?.results,payload?.data?.items,
+      payload?.response?.listings,payload?.response?.results,payload?.response?.items,
+      payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])
+    ];
     return candidates.find(Array.isArray) || [];
   }
 
-  async function postJson(url, body, signal) {
-    const started=performance.now();
-    log('info','parser.request',{url,query:body.query,source:body.source});
-    try{
-      const response = await fetch(url,{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-generic-parser-contract':config.genericParserContract},body:JSON.stringify(body),signal,cache:'no-store'});
-      const durationMs=Math.round(performance.now()-started);
-      log(response.ok?'info':'error','parser.response',{url,status:response.status,durationMs});
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    }catch(error){
-      log('error','parser.failure',{url,message:error.message,durationMs:Math.round(performance.now()-started)});
+  async function requestJson(url, { method='GET', body=null, signal } = {}) {
+    const requestId = makeRequestId();
+    const started = performance.now();
+    const route = new URL(url).pathname;
+    const headers = {
+      accept: 'application/json',
+      'x-generic-parser-contract': config.genericParserContract,
+      'x-request-id': requestId
+    };
+    const options = { method, headers, signal, cache: 'no-store' };
+    if (body != null) {
+      headers['content-type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
+    const requestMeta = {
+      requestId,
+      timestamp: new Date().toISOString(),
+      route,
+      method,
+      origin: location.origin,
+      userAgent: navigator.userAgent,
+      query: body?.query,
+      source: body?.source
+    };
+    log('info','parser.request',requestMeta);
+    try {
+      const response = await fetch(url, options);
+      const durationMs = Math.round(performance.now()-started);
+      const text = await response.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; }
+      catch { throw new Error(`Ungültige JSON-Antwort (HTTP ${response.status})`); }
+      const hitCount = collectListings(data).length;
+      log(response.ok?'info':'error','parser.response',{
+        ...requestMeta,
+        durationMs,
+        status:response.status,
+        hitCount,
+        workerRequestId:response.headers.get('x-request-id') || response.headers.get('cf-ray') || null,
+        contentType:response.headers.get('content-type') || null
+      });
+      if (!response.ok) {
+        const message = data?.error?.message || data?.message || `HTTP ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.response = data;
+        throw error;
+      }
+      return data;
+    } catch(error) {
+      log('error','parser.failure',{
+        ...requestMeta,
+        durationMs:Math.round(performance.now()-started),
+        status:error?.status || null,
+        message:error?.message || String(error),
+        stack:error?.stack || null
+      });
       throw error;
     }
+  }
+
+  async function postJson(url, body, signal) {
+    return requestJson(url,{method:'POST',body,signal});
   }
 
   async function searchKleinanzeigen(item, options = {}) {
@@ -87,5 +143,5 @@
     return {automatic,direct:directSearches(item),status,checkedAt};
   }
 
-  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer});
+  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,requestJson,collectListings});
 })();
