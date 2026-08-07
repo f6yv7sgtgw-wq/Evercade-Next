@@ -1,13 +1,13 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.6.0",
-  "displayVersion": "1.4.6.0",
+  "version": "1.4.7.0",
+  "displayVersion": "1.4.7.0",
   "channel": "stable",
   "releaseDate": "2026-08-08",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
-  "phase": "5.2-ui-cleanup",
+  "phase": "5.3",
   "integration": "GenericParser 0.45.2 Build 6",
   "genericParser": {
     "expectedVersion": "0.45.2",
@@ -16,23 +16,28 @@
     "workerUrl": "https://genericparser.f6yv7sgtgw.workers.dev"
   },
   "features": [
-    "Non-sticky header and navigation so controls no longer hang over scrolled content",
-    "Visible navigation reduced to Sammlung, Katalog, Deals and Vollsuche",
-    "Fehlend and Wünsche removed from the visible GUI",
-    "Collection summary reduced to Sammlung and Kaufwert",
-    "Wishlist controls retired from visible cards and detail dialog",
-    "Full-search wording simplified to catalog-order processing",
-    "50 ms delay between full-search cartridges",
-    "Single automatic retry after 5 seconds for HTTP 5xx responses",
-    "Slash normalization in GenericParser search queries while preserving original cartridge titles",
-    "Persistent diagnostics and Worker telemetry",
+    "Phase 5.3 centralized Trefferzentrale",
+    "Persistent de-duplicated offer index across full-search runs",
+    "Active, new and historical offer state",
+    "First-seen and last-seen timestamps",
+    "Price history per offer",
+    "Automatic inactive marking when a previously seen offer is no longer returned for its cartridge",
+    "Filters for status, source and maximum total price",
+    "Sorting by total price, newest offer or cartridge",
+    "Direct offer links and source badges",
+    "Legacy saved search migration into the offer index",
+    "50 ms paid-Worker pacing",
+    "Single HTTP 5xx retry after 5 seconds",
+    "Slash-safe GenericParser search queries",
+    "Non-sticky mobile-first GUI",
+    "Horizontal overflow prevention for navigation, filters, cards and links",
+    "Fehlend and Wünsche remain retired from the visible GUI",
     "GenericParser 0.45.2 Build 6 integration"
   ],
   "nonGoals": [
-    "Changing the collection data model",
+    "Adding new automatic search sources in Phase 5.3",
     "Changing GenericParser search runtime",
-    "New search sources",
-    "Ranking changes",
-    "Price scoring changes"
+    "Changing ranking in the GenericParser",
+    "Deleting legacy wishlist data"
   ]
 }
