@@ -1,4 +1,4 @@
-# Project Evercade Next 1.2.0
+# Project Evercade Next 1.3.0
 
 Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früheren Repository.
 
@@ -36,10 +36,25 @@ Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früh
 - Protokollierung von Parser-Anfragen, Antworten, Laufzeiten und Fehlern
 - eigene Seite `debug.html` für Log, Export und Systemdiagnose
 - Live-Prüfung von Version, Konfiguration, Katalog, Parser-Vertrag und Browser-Speicher
-- erweiterte Repository-Konsistenzprüfung für alle Phase-4-Dateien und Verknüpfungen
+- erweiterte Repository-Konsistenzprüfung
 - Syntaxprüfung sämtlicher JavaScript-Dateien
 - öffentlicher Smoke-Test nach jedem Deployment
-- ein Release gilt nur als erfolgreich, wenn die ausgelieferte Version, Hauptseite und Diagnoseseite online geprüft wurden
+
+## Phase 5.1 – Suchengine für alle fehlenden Cartridges
+
+- neue Ansicht `Vollsuche`
+- erzeugt eine Warteschlange ausschließlich aus nicht vorhandenen Cartridges
+- Wunschlisten-Einträge werden zuerst verarbeitet
+- danach deterministische Reihenfolge nach Serie und Katalognummer
+- Suche läuft Cartridge für Cartridge über den bestehenden automatischen Suchclient
+- Fortschritt, aktueller Eintrag, Treffer und Fehler werden live angezeigt
+- Start, Pause, Fortsetzen und Zurücksetzen
+- Warteschlange, Fortschritt und Ergebnisse werden in `localStorage` gespeichert
+- ein während eines Browser-Neustarts laufender Suchlauf wird automatisch wieder aufgenommen
+- bereits abgeschlossene Einträge werden beim Fortsetzen nicht erneut verarbeitet
+- jeder Queue-Schritt wird im Eventlog protokolliert
+
+Phase 5.1 stellt die Suchwarteschlange bereit. Die Erweiterung auf die vollständige Multi-Quellen-Automatik folgt in Phase 5.2.
 
 ## Entwicklung
 
