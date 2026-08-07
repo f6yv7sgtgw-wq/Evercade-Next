@@ -16,12 +16,13 @@
   let searchController = null;
   let queueController = null;
   let queueLoopActive = false;
+  const QUEUE_DELAY_MS = 1500;
   const save = () => localStorage.setItem(config.storageKey, JSON.stringify(state));
   const money = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2).replace('.',',')} €` : '—';
   const item = key => catalog.find(x => x.key === key);
   const color = s => s==='console'?'red':s==='arcade'?'violet':'blue';
   const sortItems = list => [...list].sort((a,b) => (seriesOrder[a.series] - seriesOrder[b.series]) || (a.number - b.number));
-  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
 
   async function applyVersion(){
     try { const r=await fetch(`${config.versionFile}?t=${Date.now()}`,{cache:'no-store'}); const v=await r.json(); $$('.version').forEach(n=>n.textContent=v.displayVersion||v.version); }
@@ -81,7 +82,7 @@
     const ordered=queueOrder();
     state.queue={status:'paused',keys:ordered.map(x=>x.key),index:0,done:0,offers:0,errors:0,startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),current:null};
     save();
-    log('info','queue.created',{total:ordered.length,wishlistFirst:state.wishlist.filter(k=>ordered.some(x=>x.key===k)).length});
+    log('info','queue.created',{total:ordered.length,wishlistFirst:state.wishlist.filter(k=>ordered.some(x=>x.key===k)).length,interCartridgeDelayMs:QUEUE_DELAY_MS});
     renderQueue();
   }
   function renderQueue(){
@@ -104,6 +105,12 @@
     $('#queueStart').disabled=q.status==='running';
     $('#queuePause').disabled=q.status!=='running';
     $('#queueResume').disabled=!(q.status==='paused'&&q.index<total);
+  }
+  async function queueDelay(cartridge, index, total){
+    const started=performance.now();
+    log('info','queue.delay.start',{key:cartridge.key,title:cartridge.title,index,total,delayMs:QUEUE_DELAY_MS,reason:'rate_limit_protection'});
+    await new Promise(resolve=>setTimeout(resolve,QUEUE_DELAY_MS));
+    log('info','queue.delay.end',{key:cartridge.key,title:cartridge.title,index,total,delayMs:QUEUE_DELAY_MS,actualDelayMs:Math.round(performance.now()-started),reason:'rate_limit_protection'});
   }
   async function queueLoop(){
     if(queueLoopActive || state.queue.status!=='running') return;
@@ -139,11 +146,13 @@
         state.queue.current=null;
         state.queue.updatedAt=new Date().toISOString();
         save(); renderQueue();
-        await new Promise(resolve=>setTimeout(resolve,350));
+        if(state.queue.status==='running' && state.queue.index<state.queue.keys.length){
+          await queueDelay(cartridge,state.queue.index,state.queue.keys.length);
+        }
       }
       if(state.queue.status==='running' && state.queue.index>=state.queue.keys.length){
         state.queue.status='complete'; state.queue.current=null; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-        log('info','queue.complete',{total:state.queue.keys.length,done:state.queue.done,offers:state.queue.offers,errors:state.queue.errors});
+        log('info','queue.complete',{total:state.queue.keys.length,done:state.queue.done,offers:state.queue.offers,errors:state.queue.errors,interCartridgeDelayMs:QUEUE_DELAY_MS});
       }
     } finally { queueLoopActive=false; queueController=null; }
   }
@@ -151,7 +160,7 @@
     if(!searchClient){ log('error','queue.start.failed',{reason:'search client unavailable'}); return; }
     createQueue();
     state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-    log('info','queue.started',{total:state.queue.keys.length});
+    log('info','queue.started',{total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS});
     queueLoop();
   }
   function pauseQueue(){
@@ -163,7 +172,7 @@
   function resumeQueue(){
     if(state.queue.status!=='paused' || state.queue.index>=state.queue.keys.length) return;
     state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-    log('info','queue.resumed',{index:state.queue.index,total:state.queue.keys.length});
+    log('info','queue.resumed',{index:state.queue.index,total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS});
     queueLoop();
   }
   function resetQueue(){
