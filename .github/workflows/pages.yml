@@ -1,4 +1,4 @@
-name: Validate and deploy Evercade Next
+name: Validate deploy and verify Evercade Next
 
 on:
   push:
@@ -24,8 +24,11 @@ jobs:
           node-version: 22
       - run: node --check src/config.js
       - run: node --check src/catalog.js
+      - run: node --check src/eventlog.js
+      - run: node --check src/debug.js
       - run: node --check src/parser-client.js
       - run: node --check src/app.js
+      - run: node --check scripts/smoke.mjs
       - run: node scripts/validate.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -37,7 +40,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: validate
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read release version
+        id: version
+        run: echo "value=$(node -p \"require('./VERSION.json').version\")" >> "$GITHUB_OUTPUT"
+      - name: Verify public deployment
+        env:
+          PAGES_URL: ${{ needs.deploy.outputs.page_url }}
+          EXPECTED_VERSION: ${{ steps.version.outputs.value }}
+        run: node scripts/smoke.mjs
