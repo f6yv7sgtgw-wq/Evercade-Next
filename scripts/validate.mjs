@@ -22,6 +22,9 @@ if (!html.includes('debug.html')) throw new Error('Diagnostics link missing from
 for (const id of ['dealsView','dealCartridge','runDealSearch','automaticDeals','directSources']) {
   if (!html.includes(`id="${id}"`)) throw new Error(`Missing deal UI element ${id}`);
 }
+for (const id of ['queueView','queueStart','queuePause','queueResume','queueReset','queueProgressText','queueProgressBar','queuePreview']) {
+  if (!html.includes(`id="${id}"`)) throw new Error(`Missing phase 5.1 queue UI element ${id}`);
+}
 
 const debugHtml = read('debug.html');
 for (const asset of ['styles.css','src/config.js','src/eventlog.js','src/debug.js']) {
@@ -40,6 +43,7 @@ const configSource = read('src/config.js');
 const parserSource = read('src/parser-client.js');
 const eventSource = read('src/eventlog.js');
 const debugSource = read('src/debug.js');
+const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 if (!configSource.includes('generic-parser-module-v1')) throw new Error('GenericParser contract missing');
 if (!configSource.includes('genericParserSearchPaths')) throw new Error('GenericParser endpoint paths missing');
@@ -50,9 +54,14 @@ if (!eventSource.includes('window.EVERCADE_LOG')) throw new Error('Event log exp
 if (!eventSource.includes('unhandledrejection')) throw new Error('Unhandled rejection logging missing');
 if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics completion logging missing');
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
+for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) {
+  if (!appSource.includes(marker)) throw new Error(`Phase 5.1 queue marker missing: ${marker}`);
+}
+if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Queue priority or missing-cartridge filter is not connected to collection state');
 
-const runtimeSource = read('src/app.js') + configSource + parserSource + eventSource + debugSource + html + debugHtml;
+const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
+if (String(release.phase) !== '5.1') throw new Error('Release phase must be 5.1');
 
-console.log(`Evercade Next ${version}: phase ${release.phase ?? '?'} validation passed with ${count} catalog entries and diagnostics.`);
+console.log(`Evercade Next ${version}: phase ${release.phase} validation passed with ${count} catalog entries, diagnostics and persistent full-search queue.`);
