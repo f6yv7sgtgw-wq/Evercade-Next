@@ -3,6 +3,7 @@
   const $ = selector => document.querySelector(selector);
   const logApi = window.EVERCADE_LOG;
   const config = window.EVERCADE_CONFIG;
+  const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `health-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const check = async (name, task) => {
     const started = performance.now();
@@ -14,23 +15,38 @@
     }
   };
 
-  const fetchJson = async url => {
-    const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
+  const fetchJson = async (url, remote = false) => {
+    const requestId = makeRequestId();
+    const target = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    const response = await fetch(target, {
+      cache: 'no-store',
+      headers: remote ? {
+        accept: 'application/json',
+        'x-generic-parser-contract': config.genericParserContract,
+        'x-request-id': requestId
+      } : { accept: 'application/json' }
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
+    const data = await response.json();
+    return { data, response, requestId };
   };
+
+  const workerUrl = path => `${config.genericParserWorkerUrl}${path}`;
+  const bodyVersion = body => String(body?.version ?? body?.workerVersion ?? body?.data?.version ?? body?.data?.workerVersion ?? 'unbekannt');
+  const bodyContract = body => String(body?.contract ?? body?.moduleContract ?? body?.workerContract ?? body?.data?.contract ?? body?.data?.moduleContract ?? 'unbekannt');
 
   async function runChecks() {
     $('#healthChecks').innerHTML = '<p class="empty">Prüfung läuft …</p>';
+    const paths = config.genericParserDiagnosticPaths;
     const results = await Promise.all([
       check('VERSION.json', async () => {
-        const data = await fetchJson('VERSION.json');
+        const { data } = await fetchJson('VERSION.json');
         if (!/^\d+\.\d+\.\d+$/.test(data.version)) throw new Error('Ungültige Version');
         return data.version;
       }),
       check('Konfiguration', async () => {
-        if (!config?.genericParserWorkerUrl || !config?.pagesUrl) throw new Error('Konfiguration unvollständig');
-        return 'vollständig';
+        if (!config?.genericParserWorkerUrl || !config?.pagesUrl || !paths?.health || !paths?.version || !paths?.diagnostics) throw new Error('Konfiguration unvollständig');
+        return 'zentral und vollständig';
       }),
       check('Katalog', async () => {
         await new Promise((resolve, reject) => {
@@ -43,9 +59,27 @@
         if (!Array.isArray(window.EVERCADE_CATALOG) || window.EVERCADE_CATALOG.length !== 87) throw new Error(`Erwartet 87, gefunden ${window.EVERCADE_CATALOG?.length || 0}`);
         return '87 Einträge';
       }),
-      check('Parser-Konfiguration', async () => {
+      check('Modulvertrag', async () => {
         if (config.genericParserContract !== 'generic-parser-module-v1') throw new Error('Falscher API-Vertrag');
         return config.genericParserContract;
+      }),
+      check('Worker Health', async () => {
+        const { data, response } = await fetchJson(workerUrl(paths.health), true);
+        const status = data?.status ?? data?.health ?? data?.ok;
+        if (status === false || String(status).toLowerCase() === 'error') throw new Error('Worker meldet Fehler');
+        return `HTTP ${response.status}`;
+      }),
+      check('Worker Version', async () => {
+        const { data, response } = await fetchJson(workerUrl(paths.version), true);
+        const version = bodyVersion(data);
+        if (version === 'unbekannt') throw new Error('Version fehlt in Antwort');
+        return `${version} · HTTP ${response.status}`;
+      }),
+      check('Worker Diagnostics', async () => {
+        const { data, response } = await fetchJson(workerUrl(paths.diagnostics), true);
+        const contract = bodyContract(data);
+        if (contract !== 'unbekannt' && contract !== config.genericParserContract) throw new Error(`Modulvertrag abweichend: ${contract}`);
+        return `${contract === 'unbekannt' ? config.genericParserContract : contract} · HTTP ${response.status}`;
       }),
       check('Lokaler Speicher', async () => {
         const key = '__evercade_test__';
@@ -55,7 +89,13 @@
       })
     ]);
     $('#healthChecks').innerHTML = results.map(result => `<article class="health-card ${result.status}"><strong>${result.name}</strong><span>${result.status === 'ok' ? 'OK' : 'Fehler'}</span><p>${result.detail}</p><small>${result.ms} ms</small></article>`).join('');
-    logApi.log(results.every(result => result.status === 'ok') ? 'info' : 'error', 'diagnostics.complete', { results });
+    logApi.log(results.every(result => result.status === 'ok') ? 'info' : 'error', 'diagnostics.complete', {
+      timestamp: new Date().toISOString(),
+      workerUrl: config.genericParserWorkerUrl,
+      expectedWorkerVersion: config.genericParserExpectedVersion,
+      contract: config.genericParserContract,
+      results
+    });
     renderLog();
   }
 
