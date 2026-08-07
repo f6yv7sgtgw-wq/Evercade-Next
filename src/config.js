@@ -4,7 +4,8 @@ window.EVERCADE_CONFIG = Object.freeze({
   pagesUrl: 'https://f6yv7sgtgw-wq.github.io/Evercade-Next/',
   genericParserWorkerUrl: 'https://genericparser.f6yv7sgtgw.workers.dev',
   genericParserContract: 'generic-parser-module-v1',
-  genericParserExpectedVersion: '0.45.1',
+  genericParserExpectedVersion: '0.45.2',
+  genericParserExpectedBuild: 'gp-0452-20260807-4',
   genericParserSearchPaths: Object.freeze([
     '/api/module/search',
     '/api/search',
