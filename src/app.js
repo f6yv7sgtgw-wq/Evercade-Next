@@ -17,7 +17,7 @@
   let queueController = null;
   let queueLoopActive = false;
   let consecutiveLoadFailures = 0;
-  const QUEUE_DELAY_MS = 200;
+  const QUEUE_DELAY_MS = 50;
   const BATCH_SIZE = 10;
   const BATCH_DELAY_MS = 0;
   const RECOVERY_FAILURE_THRESHOLD = 3;
