@@ -9,15 +9,14 @@ if (!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('VERSION.json mu
 
 const requiredFiles = [
   'index.html','debug.html','styles.css','manifest.webmanifest',
-  'src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js','src/parser-client.js','src/app.js',
+  'src/release-loader.js','src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js','src/parser-client.js','src/app.js',
   'scripts/smoke.mjs','.nojekyll'
 ];
 for (const file of requiredFiles) if (!fs.existsSync(file)) throw new Error(`Missing ${file}`);
 
 const html = read('index.html');
-for (const asset of ['styles.css','src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/app.js']) {
-  if (!html.includes(asset)) throw new Error(`index.html does not load ${asset}`);
-}
+if (!html.includes('src/release-loader.js')) throw new Error('index.html must load canonical release loader');
+if (!html.includes('data-evercade-page="app"')) throw new Error('index.html must declare app page type');
 if (!html.includes('debug.html')) throw new Error('Diagnostics link missing from index.html');
 for (const id of ['dealsView','dealCartridge','runDealSearch','automaticDeals','directSources']) {
   if (!html.includes(`id="${id}"`)) throw new Error(`Missing deal UI element ${id}`);
@@ -27,11 +26,18 @@ for (const id of ['queueView','queueStart','queuePause','queueResume','queueRese
 }
 
 const debugHtml = read('debug.html');
-for (const asset of ['styles.css','src/config.js','src/eventlog.js','src/debug.js','src/endpoint-test.js']) {
-  if (!debugHtml.includes(asset)) throw new Error(`debug.html does not load ${asset}`);
-}
+if (!debugHtml.includes('src/release-loader.js')) throw new Error('debug.html must load canonical release loader');
+if (!debugHtml.includes('data-evercade-page="debug"')) throw new Error('debug.html must declare debug page type');
 for (const id of ['runChecks','healthChecks','downloadLog','clearLog','eventLog','runAllEndpointTests','endpointTestButtons','endpointTestResults']) {
   if (!debugHtml.includes(`id="${id}"`)) throw new Error(`Missing diagnostics element ${id}`);
+}
+
+const loaderSource = read('src/release-loader.js');
+for (const asset of ['src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/app.js','src/debug.js','src/endpoint-test.js']) {
+  if (!loaderSource.includes(asset)) throw new Error(`Release loader missing ${asset}`);
+}
+for (const marker of ["fetch(`VERSION.json?t=${Date.now()}`", "cache: 'no-store'", "?v=${token}", 'window.EVERCADE_RELEASE']) {
+  if (!loaderSource.includes(marker)) throw new Error(`Release loader cache-busting marker missing: ${marker}`);
 }
 
 const catalogSource = read('src/catalog.js');
@@ -77,7 +83,7 @@ for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resum
 }
 if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Queue priority or missing-cartridge filter is not connected to collection state');
 
-const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + html + debugHtml;
+const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 if (String(release.phase) !== '5.2') throw new Error('Release phase must remain 5.2');
@@ -87,4 +93,4 @@ if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('Releas
 if (release.genericParser?.expectedBuild !== 'gp-0452-20260807-4') throw new Error('Release metadata must reference GenericParser Build 4');
 if (release.genericParser?.releaseCommit !== '9aaf8c7f770ce62106d664facfbb71d12e02d59b') throw new Error('Release metadata must reference the GenericParser 0.45.2 Build 4 release commit');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries and GenericParser 0.45.2 Build 4 integration.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, version-aware assets and GenericParser 0.45.2 Build 4 integration.`);
