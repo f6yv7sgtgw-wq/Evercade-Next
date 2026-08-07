@@ -2,6 +2,8 @@
   'use strict';
 
   const config = window.EVERCADE_CONFIG;
+  const eventLog = window.EVERCADE_LOG;
+  const log = (level, event, details) => eventLog?.log(level, event, details);
 
   const safeNumber = value => {
     const number = Number(value);
@@ -42,54 +44,38 @@
   }
 
   function collectListings(payload) {
-    const candidates = [
-      payload?.listings,
-      payload?.results,
-      payload?.items,
-      payload?.data?.listings,
-      payload?.data?.results,
-      payload?.data?.items,
-      payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])
-    ];
+    const candidates = [payload?.listings,payload?.results,payload?.items,payload?.data?.listings,payload?.data?.results,payload?.data?.items,payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])];
     return candidates.find(Array.isArray) || [];
   }
 
   async function postJson(url, body, signal) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'accept': 'application/json',
-        'x-generic-parser-contract': config.genericParserContract
-      },
-      body: JSON.stringify(body),
-      signal,
-      cache: 'no-store'
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
+    const started = performance.now();
+    log('info', 'parser.request', { url, query: body.query, source: body.source });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {'content-type':'application/json','accept':'application/json','x-generic-parser-contract':config.genericParserContract},
+        body: JSON.stringify(body), signal, cache: 'no-store'
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      log('info', 'parser.response', { url, status: response.status, durationMs: Math.round(performance.now() - started) });
+      return data;
+    } catch (error) {
+      log('error', 'parser.failure', { url, message: error.message, durationMs: Math.round(performance.now() - started) });
+      throw error;
+    }
   }
 
   async function searchKleinanzeigen(item, options = {}) {
     const query = `Evercade ${item.title}`;
-    const payload = {
-      contract: config.genericParserContract,
-      adapter: 'evercade',
-      source: 'kleinanzeigen',
-      query,
-      cartridge: { key: item.key, title: item.title, series: item.series, number: item.number },
-      required_terms: ['Evercade'],
-      accept_bundles: true,
-      accept_incomplete: false,
-      include_rejected: false,
-      max_pages: 4,
-      sort_by: 'relevance'
-    };
+    const payload = {contract:config.genericParserContract,adapter:'evercade',source:'kleinanzeigen',query,cartridge:{key:item.key,title:item.title,series:item.series,number:item.number},required_terms:['Evercade'],accept_bundles:true,accept_incomplete:false,include_rejected:false,max_pages:4,sort_by:'relevance'};
     const errors = [];
     for (const path of config.genericParserSearchPaths) {
       try {
         const data = await postJson(`${config.genericParserWorkerUrl}${path}`, payload, options.signal);
         const offers = collectListings(data).map(entry => normalizeOffer(entry, 'Kleinanzeigen')).filter(Boolean);
+        log('info', 'parser.normalized', { cartridge: item.key, offers: offers.length, endpoint: path });
         return { source: 'Kleinanzeigen', status: 'ok', offers, raw: data, endpoint: path };
       } catch (error) {
         if (error?.name === 'AbortError') throw error;
@@ -101,10 +87,7 @@
 
   function directSearches(item) {
     const query = encodeURIComponent(`Evercade ${item.title}`);
-    return config.directSources.map(source => ({
-      name: source.name,
-      url: source.url.replace('{query}', query)
-    }));
+    return config.directSources.map(source => ({ name: source.name, url: source.url.replace('{query}', query) }));
   }
 
   async function search(item, options = {}) {
@@ -117,12 +100,10 @@
     } catch (error) {
       status.push({ name: 'Kleinanzeigen', status: 'error', count: 0, error: error.message });
     }
-    automatic.sort((a, b) => {
-      const at = a.total ?? Number.POSITIVE_INFINITY;
-      const bt = b.total ?? Number.POSITIVE_INFINITY;
-      return at - bt || a.price - b.price;
-    });
-    return { automatic, direct: directSearches(item), status, checkedAt: new Date().toISOString() };
+    automatic.sort((a, b) => (a.total ?? Number.POSITIVE_INFINITY) - (b.total ?? Number.POSITIVE_INFINITY) || a.price - b.price);
+    const result = { automatic, direct: directSearches(item), status, checkedAt: new Date().toISOString() };
+    log(status.some(entry => entry.status === 'error') ? 'error' : 'info', 'search.complete', { cartridge: item.key, automatic: automatic.length, status });
+    return result;
   }
 
   window.EvercadeSearch = Object.freeze({ search, searchKleinanzeigen, directSearches, normalizeOffer });
