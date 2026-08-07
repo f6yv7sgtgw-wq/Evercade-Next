@@ -6,17 +6,18 @@
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
   const seriesLabel = {console:'Console',arcade:'Arcade',computer:'Home Computer'};
+  const seriesOrder = {console:0,arcade:1,computer:2};
   const load = () => { try { return JSON.parse(localStorage.getItem(config.storageKey)) || {}; } catch { return {}; } };
   let state = { owned: defaultOwned, wishlist: [], prices: {}, notes: {}, ...load() };
   const save = () => localStorage.setItem(config.storageKey, JSON.stringify(state));
   const money = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2).replace('.',',')} €` : '—';
   const item = key => catalog.find(x => x.key === key);
   const color = s => s==='console'?'red':s==='arcade'?'violet':'blue';
-  const sortItems = list => [...list].sort((a,b)=>({console:0,arcade:1,computer:2}[a.series]-({console:0,arcade:1,computer:2}[b.series]) || a.number-b.number);
+  const sortItems = list => [...list].sort((a,b) => (seriesOrder[a.series] - seriesOrder[b.series]) || (a.number - b.number));
 
   async function applyVersion(){
     try { const r=await fetch(`${config.versionFile}?t=${Date.now()}`,{cache:'no-store'}); const v=await r.json(); $$('.version').forEach(n=>n.textContent=v.displayVersion||v.version); }
-    catch { $$('.version').forEach(n=>n.textContent='1.0.0'); }
+    catch { $$('.version').forEach(n=>n.textContent='—'); }
   }
   function stats(){
     const owned=state.owned.length, missing=catalog.length-owned;
