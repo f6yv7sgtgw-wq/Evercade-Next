@@ -1,7 +1,7 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.5.2",
-  "displayVersion": "1.4.5.2",
+  "version": "1.4.5.3",
+  "displayVersion": "1.4.5.3",
   "channel": "stable",
   "releaseDate": "2026-08-07",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
@@ -28,6 +28,8 @@
     "GET health version and diagnostics checks",
     "GenericParser 0.45.2 compatibility verification",
     "GenericParser Build 4 visibility without hard build pinning",
+    "Version-aware JavaScript asset loading",
+    "Automatic release cache busting from VERSION.json",
     "POST search api/search and api/module/search compatibility",
     "Browser OPTIONS and CORS preflight diagnostics",
     "Per-request request IDs and timestamps",
