@@ -1,4 +1,4 @@
-# Project Evercade Next 1.4.0
+# Project Evercade Next 4.5.1
 
 Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früheren Repository.
 
@@ -35,8 +35,6 @@ Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früh
 - Erfassung von Seitenaufrufen, Sichtbarkeitswechseln, JavaScript-Fehlern und unbehandelten Promises
 - Protokollierung von Parser-Anfragen, Antworten, Laufzeiten und Fehlern
 - eigene Seite `debug.html` für Log, Export und Systemdiagnose
-- Live-Prüfung von Version, Konfiguration, Katalog, Parser-Vertrag und Browser-Speicher
-- erweiterte Repository-Konsistenzprüfung
 - Syntaxprüfung sämtlicher JavaScript-Dateien
 - öffentlicher Smoke-Test nach jedem Deployment
 
@@ -52,29 +50,74 @@ Kompletter Neuaufbau des Evercade-Sammlungsmanagers ohne Altlasten aus dem früh
 
 ## Phase 5.2 – GenericParser-Endpunktdiagnose
 
-Die Vollsuche zeigte, dass der Browser den konfigurierten GenericParser-Worker derzeit nicht zuverlässig erreicht. Phase 5.2 macht diese Schnittstelle deshalb direkt aus der ausgelieferten GitHub-Pages-Anwendung messbar.
+Die bisherige Browserdiagnose machte Routing-, Fetch- und CORS-Probleme sichtbar. Diese Basis bleibt in 4.5.1 erhalten und wird erweitert.
 
-Auf `debug.html` stehen vier Einzeltests und ein Gesamttest bereit:
+## Release 4.5.1 – GenericParser 0.45.1 Infrastruktur
 
-- `GET /search`
+4.5.1 ist ein Stabilitäts- und Infrastruktur-Release. Suchalgorithmen, Matching, Ranking und Preisbewertung werden nicht verändert. Ziel ist eine dauerhaft nachvollziehbare Browserkommunikation mit dem GenericParser-Worker.
+
+### Zentrale API-Konfiguration
+
+Evercade Next kennt zentral folgende GenericParser-Endpunkte:
+
+- `GET /health`
+- `GET /version`
+- `GET /diagnostics`
 - `POST /search`
 - `POST /api/search`
 - `POST /api/module/search`
 
-Jeder Test zeigt:
+Der Suchclient behält die bisherige Fallback-Reihenfolge `/api/module/search` → `/api/search` → `/search`. Der Modulvertrag bleibt `generic-parser-module-v1`.
 
-- vollständigen Ziel-Endpunkt
-- HTTP-Status, falls eine Antwort im Browser ankommt
-- Fetch-/Load-Fehler, falls keine auswertbare Browserantwort ankommt
-- Response-Type
-- lesbare Response-Header
-- Antwortinhalt bis 6000 Zeichen
+### CORS und Preflight-Diagnose
+
+`debug.html` prüft zusätzlich `OPTIONS /api/module/search`. Die Diagnose zeigt relevante `Access-Control-Allow-*`-Header und bewertet, ob `Access-Control-Allow-Origin` den Evercade-Origin oder `*` erlaubt. POST-Aufrufe senden weiterhin den Modulvertrag und zusätzlich eine eindeutige Request-ID.
+
+### Request-Logging
+
+Für Parser-Aufrufe protokolliert der Browser soweit clientseitig verfügbar:
+
+- Request-ID
+- Timestamp
+- Route
+- Methode
+- Origin
+- User-Agent
 - Laufzeit
-- kurze Diagnose zur Unterscheidung von HTTP-/Routing-Problemen und Browser/CORS-/Preflight-Problemen
+- HTTP-Status
+- Trefferzahl
+- Fehlertext und Stacktrace bei Clientfehlern
+- Worker-Request-ID bzw. Cloudflare-Ray-ID, sofern in der Antwort sichtbar
 
-Alle Testergebnisse werden zusätzlich im Eventlog als `endpoint.test.*` protokolliert. Die Testmatrix liegt zentral in `src/config.js`; `scripts/validate.mjs` und der Pages-Workflow prüfen die Phase-5.2-Dateien vor jedem Deployment.
+Serverseitige Stacktraces können nur vom Worker selbst geliefert werden; Evercade erfindet oder rekonstruiert sie nicht.
 
-Die eigentliche Multi-Quellen-Automatik wird erst auf dem durch Phase 5.2 bestätigten funktionierenden Parser-Endpunkt aufgebaut, damit fehlgeschlagene Requests nicht erneut als echte Nulltreffer gewertet werden.
+### Diagnose
+
+Die Diagnose prüft automatisch:
+
+- lokale Release-Version
+- zentrale Konfiguration
+- Katalog
+- Modulvertrag
+- Worker Health
+- Worker Version
+- Worker Diagnostics
+- Browser-Speicher
+- Routing und Suchendpunkte über die Endpunktmatrix
+- CORS/OPTIONS-Verhalten
+- Antwortzeiten
+
+### Deployment-Qualität
+
+Vor jedem GitHub-Pages-Deploy laufen Syntax- und Repository-Validierungen. Nach dem Deploy prüft der bestehende Smoke-Test die veröffentlichte Version und die Diagnose-Seite. Die Browser-Endpunktmatrix bildet den End-to-End-Test gegen den konfigurierten GenericParser-Worker.
+
+### Nicht Bestandteil von 4.5.1
+
+- keine neuen Suchquellen
+- keine Multi-Quellen-Suche
+- keine Rankingänderungen
+- keine Preisbewertungsänderungen
+- keine Änderung am Modulvertrag
 
 ## Entwicklung
 
@@ -96,4 +139,4 @@ Der einzige Workflow `.github/workflows/pages.yml` validiert, veröffentlicht un
 
 Anwendung: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/`
 
-Diagnose und Phase-5.2-Endpunkttests: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/debug.html`
+Diagnose und 4.5.1-Endpunkttests: `https://f6yv7sgtgw-wq.github.io/Evercade-Next/debug.html`
