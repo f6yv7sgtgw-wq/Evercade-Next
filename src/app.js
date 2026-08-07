@@ -22,7 +22,7 @@
   const item = key => catalog.find(x => x.key === key);
   const color = s => s==='console'?'red':s==='arcade'?'violet':'blue';
   const sortItems = list => [...list].sort((a,b) => (seriesOrder[a.series] - seriesOrder[b.series]) || (a.number - b.number));
-  const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
   async function applyVersion(){
     try { const r=await fetch(`${config.versionFile}?t=${Date.now()}`,{cache:'no-store'}); const v=await r.json(); $$('.version').forEach(n=>n.textContent=v.displayVersion||v.version); }
