@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <title>Project Evercade – Diagnose</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar"><div><h1>Diagnose & Eventlog</h1><p>Project Evercade Next</p></div><a class="button" href="./">Zurück</a></header>
+<main>
+  <section class="panel"><div class="section-head"><div><span class="eyebrow">Systemzustand</span><h2>Live-Prüfung</h2></div><button id="runChecks" class="primary">Erneut prüfen</button></div><div id="healthChecks" class="health-grid"></div></section>
+  <section class="panel"><div class="section-head"><div><span class="eyebrow">Browseraktivität</span><h2>Eventlog</h2></div><div class="data-actions"><button id="downloadLog">Export</button><button id="clearLog">Leeren</button></div></div><div id="eventLog" class="log-list"></div></section>
+</main>
+<script src="src/config.js"></script>
+<script src="src/eventlog.js"></script>
+<script src="src/debug.js"></script>
+</body>
+</html>
