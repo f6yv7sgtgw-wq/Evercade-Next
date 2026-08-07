@@ -27,6 +27,10 @@
     } catch { return null; }
   };
 
+  function normalizeSearchTitle(value) {
+    return String(value ?? '').replace(/\s*\/\s*/g,' ').replace(/\s+/g,' ').trim();
+  }
+
   function normalizeOffer(raw, fallbackSource = 'Kleinanzeigen') {
     const price = safeNumber(raw?.price ?? raw?.preis ?? raw?.amount);
     const shipping = safeNumber(raw?.shipping ?? raw?.versand ?? raw?.shippingCost);
@@ -281,7 +285,12 @@
   }
 
   async function searchKleinanzeigen(item, options = {}) {
-    const query = `Evercade ${item.title}`;
+    const originalTitle = String(item.title ?? '');
+    const normalizedTitle = normalizeSearchTitle(originalTitle);
+    const query = `Evercade ${normalizedTitle}`;
+    if (normalizedTitle !== originalTitle) {
+      log('info','parser.query.normalized',{cartridge:item.key,originalTitle,normalizedTitle,query,reason:'slash_removed'});
+    }
     const payload = {contract:config.genericParserContract,adapter:'evercade',mode:'live',source:'auto',query,page:0,cartridge:{key:item.key,title:item.title,series:item.series,number:item.number},required_terms:['Evercade'],accept_bundles:true,accept_incomplete:false,include_review:true,include_rejected:false,sort_by:'relevance'};
     const errors=[];
     for (const path of config.genericParserSearchPaths) {
@@ -315,5 +324,5 @@
   }
 
   window.EVERCADE_WORKER_TELEMETRY=Object.freeze({snapshot,probeWorkerHealth});
-  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,requestJson,collectListings,telemetry:snapshot});
+  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,normalizeSearchTitle,requestJson,collectListings,telemetry:snapshot});
 })();
