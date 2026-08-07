@@ -1,13 +1,13 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.3.0",
-  "displayVersion": "1.3.0",
+  "version": "1.4.0",
+  "displayVersion": "1.4.0",
   "channel": "stable",
   "releaseDate": "2026-08-07",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
-  "phase": "5.1",
+  "phase": "5.2",
   "features": [
     "Persistent browser event log",
     "Dedicated diagnostics page",
@@ -15,7 +15,10 @@
     "Full-search queue for all missing cartridges",
     "Wishlist-first queue prioritization",
     "Pause resume and reset controls",
-    "Automatic resume after browser restart",
-    "Persistent per-cartridge search results and queue progress"
+    "Persistent per-cartridge queue progress",
+    "Browser-based GenericParser endpoint test matrix",
+    "GET and POST endpoint diagnostics",
+    "HTTP status response body and readable response header capture",
+    "Endpoint test logging for CORS and route troubleshooting"
   ]
 }
