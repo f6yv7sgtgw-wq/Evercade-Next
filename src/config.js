@@ -9,6 +9,12 @@ window.EVERCADE_CONFIG = Object.freeze({
     '/api/search',
     '/search'
   ]),
+  genericParserEndpointTests: Object.freeze([
+    Object.freeze({ id: 'get-search', label: 'GET /search', method: 'GET', path: '/search' }),
+    Object.freeze({ id: 'post-search', label: 'POST /search', method: 'POST', path: '/search' }),
+    Object.freeze({ id: 'post-api-search', label: 'POST /api/search', method: 'POST', path: '/api/search' }),
+    Object.freeze({ id: 'post-module-search', label: 'POST /api/module/search', method: 'POST', path: '/api/module/search' })
+  ]),
   dealApiUrl: 'https://project-evercade-deal-api.jnldc.chatgpt.site',
   directSources: Object.freeze([
     { name: 'eBay Deutschland', url: 'https://www.ebay.de/sch/i.html?_nkw={query}' },
