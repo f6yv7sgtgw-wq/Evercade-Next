@@ -16,13 +16,20 @@
   let searchController = null;
   let queueController = null;
   let queueLoopActive = false;
+  let consecutiveLoadFailures = 0;
   const QUEUE_DELAY_MS = 1500;
+  const BATCH_SIZE = 10;
+  const BATCH_DELAY_MS = 30000;
+  const RECOVERY_FAILURE_THRESHOLD = 3;
+  const RECOVERY_DELAY_MS = 60000;
+  const RECOVERY_HEALTH_RETRY_MS = 15000;
   const save = () => localStorage.setItem(config.storageKey, JSON.stringify(state));
   const money = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2).replace('.',',')} €` : '—';
   const item = key => catalog.find(x => x.key === key);
   const color = s => s==='console'?'red':s==='arcade'?'violet':'blue';
   const sortItems = list => [...list].sort((a,b) => (seriesOrder[a.series] - seriesOrder[b.series]) || (a.number - b.number));
-  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'\"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
+  const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 
   async function applyVersion(){
     try { const r=await fetch(`${config.versionFile}?t=${Date.now()}`,{cache:'no-store'}); const v=await r.json(); $$('.version').forEach(n=>n.textContent=v.displayVersion||v.version); }
@@ -80,9 +87,10 @@
   }
   function createQueue(){
     const ordered=queueOrder();
+    consecutiveLoadFailures=0;
     state.queue={status:'paused',keys:ordered.map(x=>x.key),index:0,done:0,offers:0,errors:0,startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),current:null};
     save();
-    log('info','queue.created',{total:ordered.length,wishlistFirst:state.wishlist.filter(k=>ordered.some(x=>x.key===k)).length,interCartridgeDelayMs:QUEUE_DELAY_MS});
+    log('info','queue.created',{total:ordered.length,wishlistFirst:state.wishlist.filter(k=>ordered.some(x=>x.key===k)).length,interCartridgeDelayMs:QUEUE_DELAY_MS,batchSize:BATCH_SIZE,batchDelayMs:BATCH_DELAY_MS,recoveryFailureThreshold:RECOVERY_FAILURE_THRESHOLD,recoveryDelayMs:RECOVERY_DELAY_MS});
     renderQueue();
   }
   function renderQueue(){
@@ -106,11 +114,47 @@
     $('#queuePause').disabled=q.status!=='running';
     $('#queueResume').disabled=!(q.status==='paused'&&q.index<total);
   }
-  async function queueDelay(cartridge, index, total){
+  async function timedQueuePause(eventPrefix, delayMs, details){
     const started=performance.now();
-    log('info','queue.delay.start',{key:cartridge.key,title:cartridge.title,index,total,delayMs:QUEUE_DELAY_MS,reason:'rate_limit_protection'});
-    await new Promise(resolve=>setTimeout(resolve,QUEUE_DELAY_MS));
-    log('info','queue.delay.end',{key:cartridge.key,title:cartridge.title,index,total,delayMs:QUEUE_DELAY_MS,actualDelayMs:Math.round(performance.now()-started),reason:'rate_limit_protection'});
+    log('info',`${eventPrefix}.start`,{...details,delayMs});
+    await sleep(delayMs);
+    log('info',`${eventPrefix}.end`,{...details,delayMs,actualDelayMs:Math.round(performance.now()-started)});
+  }
+  async function queueDelay(cartridge,index,total){
+    return timedQueuePause('queue.delay',QUEUE_DELAY_MS,{key:cartridge.key,title:cartridge.title,index,total,reason:'rate_limit_protection'});
+  }
+  async function batchPause(index,total){
+    return timedQueuePause('queue.batch.pause',BATCH_DELAY_MS,{index,total,batchSize:BATCH_SIZE,reason:'worker_free_tier_protection'});
+  }
+  async function workerHealthCheck(){
+    const requestId=globalThis.crypto?.randomUUID?.() || `recovery-${Date.now()}`;
+    const started=performance.now();
+    try{
+      const response=await fetch(`${config.genericParserWorkerUrl}/health?t=${Date.now()}`,{cache:'no-store',mode:'cors',credentials:'omit',headers:{accept:'application/json','x-generic-parser-contract':config.genericParserContract,'x-request-id':requestId}});
+      const ok=response.ok;
+      log(ok?'info':'warn','queue.recovery.health',{ok,status:response.status,durationMs:Math.round(performance.now()-started),requestId});
+      return ok;
+    }catch(error){
+      log('warn','queue.recovery.health',{ok:false,status:null,durationMs:Math.round(performance.now()-started),requestId,errorName:error?.name||null,message:error?.message||String(error)});
+      return false;
+    }
+  }
+  async function recoveryPause(index,total){
+    log('warn','queue.recovery.triggered',{index,total,consecutiveLoadFailures,threshold:RECOVERY_FAILURE_THRESHOLD,initialDelayMs:RECOVERY_DELAY_MS,reason:'three_load_failed_requests'});
+    await timedQueuePause('queue.recovery.pause',RECOVERY_DELAY_MS,{index,total,reason:'worker_recovery'});
+    let attempt=0;
+    while(state.queue.status==='running'){
+      attempt+=1;
+      const healthy=await workerHealthCheck();
+      if(healthy){
+        log('info','queue.recovery.complete',{index,total,attempts:attempt,consecutiveLoadFailuresBeforeReset:consecutiveLoadFailures});
+        consecutiveLoadFailures=0;
+        return true;
+      }
+      log('warn','queue.recovery.wait',{index,total,attempt,retryInMs:RECOVERY_HEALTH_RETRY_MS});
+      await sleep(RECOVERY_HEALTH_RETRY_MS);
+    }
+    return false;
   }
   async function queueLoop(){
     if(queueLoopActive || state.queue.status!=='running') return;
@@ -123,7 +167,7 @@
           state.queue.index+=1; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue(); continue;
         }
         state.queue.current=key; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-        log('info','queue.item.start',{index:state.queue.index+1,total:state.queue.keys.length,key,title:cartridge.title});
+        log('info','queue.item.start',{index:state.queue.index+1,total:state.queue.keys.length,key,title:cartridge.title,consecutiveLoadFailures});
         queueController=new AbortController();
         try{
           const result=await searchClient.search(cartridge,{signal:queueController.signal});
@@ -132,27 +176,38 @@
           state.searches[key]={checkedAt:result.checkedAt,offers:offers.slice(0,20),status:result.status};
           state.queue.offers+=offers.length;
           state.queue.done+=1;
+          consecutiveLoadFailures=0;
           log('info','queue.item.complete',{key,title:cartridge.title,offers:offers.length,index:state.queue.index+1,total:state.queue.keys.length});
         }catch(error){
           if(error?.name==='AbortError'){
             log('info','queue.item.aborted',{key,title:cartridge.title});
             break;
           }
+          const loadFailures=(String(error?.message||'').match(/Load failed/g)||[]).length;
+          consecutiveLoadFailures=loadFailures?consecutiveLoadFailures+loadFailures:0;
           state.queue.errors+=1;
           state.queue.done+=1;
-          log('error','queue.item.error',{key,title:cartridge.title,message:error.message});
+          log('error','queue.item.error',{key,title:cartridge.title,message:error.message,loadFailuresInError:loadFailures,consecutiveLoadFailures});
         }
         state.queue.index+=1;
         state.queue.current=null;
         state.queue.updatedAt=new Date().toISOString();
         save(); renderQueue();
-        if(state.queue.status==='running' && state.queue.index<state.queue.keys.length){
+        if(state.queue.status!=='running' || state.queue.index>=state.queue.keys.length) continue;
+        if(consecutiveLoadFailures>=RECOVERY_FAILURE_THRESHOLD){
+          const recovered=await recoveryPause(state.queue.index,state.queue.keys.length);
+          if(!recovered) break;
+        }
+        if(state.queue.status==='running' && state.queue.index%BATCH_SIZE===0){
+          await batchPause(state.queue.index,state.queue.keys.length);
+        }
+        if(state.queue.status==='running'){
           await queueDelay(cartridge,state.queue.index,state.queue.keys.length);
         }
       }
       if(state.queue.status==='running' && state.queue.index>=state.queue.keys.length){
         state.queue.status='complete'; state.queue.current=null; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-        log('info','queue.complete',{total:state.queue.keys.length,done:state.queue.done,offers:state.queue.offers,errors:state.queue.errors,interCartridgeDelayMs:QUEUE_DELAY_MS});
+        log('info','queue.complete',{total:state.queue.keys.length,done:state.queue.done,offers:state.queue.offers,errors:state.queue.errors,interCartridgeDelayMs:QUEUE_DELAY_MS,batchSize:BATCH_SIZE,batchDelayMs:BATCH_DELAY_MS,recoveryFailureThreshold:RECOVERY_FAILURE_THRESHOLD,recoveryDelayMs:RECOVERY_DELAY_MS});
       }
     } finally { queueLoopActive=false; queueController=null; }
   }
@@ -160,7 +215,7 @@
     if(!searchClient){ log('error','queue.start.failed',{reason:'search client unavailable'}); return; }
     createQueue();
     state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-    log('info','queue.started',{total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS});
+    log('info','queue.started',{total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS,batchSize:BATCH_SIZE,batchDelayMs:BATCH_DELAY_MS,recoveryFailureThreshold:RECOVERY_FAILURE_THRESHOLD,recoveryDelayMs:RECOVERY_DELAY_MS});
     queueLoop();
   }
   function pauseQueue(){
@@ -172,11 +227,11 @@
   function resumeQueue(){
     if(state.queue.status!=='paused' || state.queue.index>=state.queue.keys.length) return;
     state.queue.status='running'; state.queue.updatedAt=new Date().toISOString(); save(); renderQueue();
-    log('info','queue.resumed',{index:state.queue.index,total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS});
+    log('info','queue.resumed',{index:state.queue.index,total:state.queue.keys.length,interCartridgeDelayMs:QUEUE_DELAY_MS,batchSize:BATCH_SIZE,batchDelayMs:BATCH_DELAY_MS});
     queueLoop();
   }
   function resetQueue(){
-    queueController?.abort(); state.queue=emptyQueue(); save(); renderQueue(); log('info','queue.reset');
+    queueController?.abort(); consecutiveLoadFailures=0; state.queue=emptyQueue(); save(); renderQueue(); log('info','queue.reset');
   }
   function restoreQueue(){
     if(state.queue.status==='running'){
