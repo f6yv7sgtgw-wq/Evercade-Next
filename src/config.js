@@ -4,16 +4,30 @@ window.EVERCADE_CONFIG = Object.freeze({
   pagesUrl: 'https://f6yv7sgtgw-wq.github.io/Evercade-Next/',
   genericParserWorkerUrl: 'https://genericparser.f6yv7sgtgw.workers.dev',
   genericParserContract: 'generic-parser-module-v1',
+  genericParserExpectedVersion: '0.45.1',
   genericParserSearchPaths: Object.freeze([
     '/api/module/search',
     '/api/search',
     '/search'
   ]),
+  genericParserDiagnosticPaths: Object.freeze({
+    health: '/health',
+    version: '/version',
+    diagnostics: '/diagnostics'
+  }),
   genericParserEndpointTests: Object.freeze([
-    Object.freeze({ id: 'get-search', label: 'GET /search', method: 'GET', path: '/search' }),
-    Object.freeze({ id: 'post-search', label: 'POST /search', method: 'POST', path: '/search' }),
-    Object.freeze({ id: 'post-api-search', label: 'POST /api/search', method: 'POST', path: '/api/search' }),
-    Object.freeze({ id: 'post-module-search', label: 'POST /api/module/search', method: 'POST', path: '/api/module/search' })
+    Object.freeze({ id: 'get-health', label: 'GET /health', method: 'GET', path: '/health', kind: 'diagnostic' }),
+    Object.freeze({ id: 'get-version', label: 'GET /version', method: 'GET', path: '/version', kind: 'diagnostic' }),
+    Object.freeze({ id: 'get-diagnostics', label: 'GET /diagnostics', method: 'GET', path: '/diagnostics', kind: 'diagnostic' }),
+    Object.freeze({ id: 'options-module-search', label: 'OPTIONS /api/module/search', method: 'OPTIONS', path: '/api/module/search', kind: 'cors' }),
+    Object.freeze({ id: 'post-search', label: 'POST /search', method: 'POST', path: '/search', kind: 'search' }),
+    Object.freeze({ id: 'post-api-search', label: 'POST /api/search', method: 'POST', path: '/api/search', kind: 'search' }),
+    Object.freeze({ id: 'post-module-search', label: 'POST /api/module/search', method: 'POST', path: '/api/module/search', kind: 'search' })
+  ]),
+  genericParserCorsHeaders: Object.freeze([
+    'access-control-allow-origin',
+    'access-control-allow-methods',
+    'access-control-allow-headers'
   ]),
   dealApiUrl: 'https://project-evercade-deal-api.jnldc.chatgpt.site',
   directSources: Object.freeze([
