@@ -4,6 +4,14 @@
   const config = window.EVERCADE_CONFIG;
   const log = (level,event,details={}) => window.EVERCADE_LOG?.log(level,event,details);
   const makeRequestId = () => globalThis.crypto?.randomUUID?.() || `ev-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const requestTimes = [];
+  const telemetry = {
+    startedAt: new Date().toISOString(), requests:0, successes:0, failures:0, loadFailed:0,
+    http429:0, http5xx:0, consecutiveFailures:0, maxConsecutiveFailures:0,
+    lastSuccessAt:null, lastFailureAt:null, peakRequestsPer60s:0, lastHealthProbeAt:null,
+    healthProbes:0, healthProbeFailures:0
+  };
+  let healthProbePromise = null;
 
   const safeNumber = value => {
     const number = Number(value);
@@ -44,16 +52,74 @@
     return candidates.find(Array.isArray) || [];
   }
 
+  function noteRequestPressure() {
+    telemetry.requests += 1;
+    const stamp = Date.now();
+    requestTimes.push(stamp);
+    while (requestTimes.length && requestTimes[0] < stamp - 60000) requestTimes.shift();
+    telemetry.peakRequestsPer60s = Math.max(telemetry.peakRequestsPer60s, requestTimes.length);
+    return requestTimes.length;
+  }
+
+  function snapshot(extra={}) {
+    const elapsedMs = Date.now() - new Date(telemetry.startedAt).getTime();
+    return {
+      ...telemetry,
+      elapsedMs,
+      requestsLast60s: requestTimes.length,
+      currentRun: window.EVERCADE_LOG?.currentRunSnapshot?.() || null,
+      ...extra
+    };
+  }
+
+  async function probeWorkerHealth(reason='failure-streak') {
+    const since = telemetry.lastHealthProbeAt ? Date.now() - new Date(telemetry.lastHealthProbeAt).getTime() : Infinity;
+    if (healthProbePromise || since < 15000) return healthProbePromise;
+    telemetry.lastHealthProbeAt = new Date().toISOString();
+    telemetry.healthProbes += 1;
+    healthProbePromise = (async () => {
+      const started = performance.now();
+      const url = `${config.genericParserWorkerUrl}/health?t=${Date.now()}`;
+      log('info','worker.health.probe.start',{reason,url,telemetry:snapshot()});
+      try {
+        const response = await fetch(url,{cache:'no-store',mode:'cors',credentials:'omit'});
+        const text = await response.text();
+        let body = null;
+        try { body = text ? JSON.parse(text) : {}; } catch { body = text.slice(0,1000); }
+        const result = {
+          reason, ok:response.ok, status:response.status, responseType:response.type,
+          durationMs:Math.round(performance.now()-started),
+          build:body?.build_id || body?.build || null,
+          version:body?.version || null,
+          cfRay:response.headers.get('cf-ray') || null,
+          telemetry:snapshot()
+        };
+        log(response.ok?'info':'warn','worker.health.probe.complete',result);
+        return result;
+      } catch(error) {
+        telemetry.healthProbeFailures += 1;
+        const result = {
+          reason, ok:false, status:null, durationMs:Math.round(performance.now()-started),
+          errorName:error?.name || null, message:error?.message || String(error), telemetry:snapshot()
+        };
+        log('error','worker.health.probe.failure',result);
+        return result;
+      } finally { healthProbePromise = null; }
+    })();
+    return healthProbePromise;
+  }
+
   async function requestJson(url, { method='GET', body=null, signal } = {}) {
     const requestId = makeRequestId();
     const started = performance.now();
     const route = new URL(url).pathname;
+    const requestRate = noteRequestPressure();
     const headers = {
       accept: 'application/json',
       'x-generic-parser-contract': config.genericParserContract,
       'x-request-id': requestId
     };
-    const options = { method, headers, signal, cache: 'no-store' };
+    const options = { method, headers, signal, cache: 'no-store', mode:'cors', credentials:'omit' };
     if (body != null) {
       headers['content-type'] = 'application/json';
       options.body = JSON.stringify(body);
@@ -66,7 +132,9 @@
       origin: location.origin,
       userAgent: navigator.userAgent,
       query: body?.query,
-      source: body?.source
+      source: body?.source,
+      requestsLast60s:requestRate,
+      totalRequests:telemetry.requests
     };
     log('info','parser.request',requestMeta);
     try {
@@ -77,30 +145,67 @@
       try { data = text ? JSON.parse(text) : {}; }
       catch { throw new Error(`Ungültige JSON-Antwort (HTTP ${response.status})`); }
       const hitCount = collectListings(data).length;
+      if (response.ok) {
+        telemetry.successes += 1;
+        telemetry.consecutiveFailures = 0;
+        telemetry.lastSuccessAt = new Date().toISOString();
+      } else {
+        telemetry.failures += 1;
+        telemetry.consecutiveFailures += 1;
+        telemetry.maxConsecutiveFailures = Math.max(telemetry.maxConsecutiveFailures, telemetry.consecutiveFailures);
+        telemetry.lastFailureAt = new Date().toISOString();
+        if (response.status === 429) telemetry.http429 += 1;
+        if (response.status >= 500) telemetry.http5xx += 1;
+      }
       log(response.ok?'info':'error','parser.response',{
         ...requestMeta,
         durationMs,
         status:response.status,
         hitCount,
         workerRequestId:response.headers.get('x-request-id') || response.headers.get('cf-ray') || null,
-        contentType:response.headers.get('content-type') || null
+        cfRay:response.headers.get('cf-ray') || null,
+        contentType:response.headers.get('content-type') || null,
+        workerVersion:response.headers.get('x-genericparser-version') || null,
+        workerBuild:response.headers.get('x-genericparser-build') || null,
+        telemetry:snapshot()
       });
       if (!response.ok) {
-        const message = data?.error?.message || data?.message || `HTTP ${response.status}`;
-        const error = new Error(message);
+        const message = data?.error?.message || data?.message || data?.detail || `HTTP ${response.status}`;
+        const error = new Error(typeof message === 'string' ? message : `HTTP ${response.status}`);
         error.status = response.status;
         error.response = data;
         throw error;
       }
       return data;
     } catch(error) {
-      log('error','parser.failure',{
+      const isAbort = error?.name === 'AbortError';
+      const status = Number(error?.status || 0) || null;
+      if (!isAbort && !status) {
+        telemetry.failures += 1;
+        telemetry.consecutiveFailures += 1;
+        telemetry.maxConsecutiveFailures = Math.max(telemetry.maxConsecutiveFailures, telemetry.consecutiveFailures);
+        telemetry.lastFailureAt = new Date().toISOString();
+        if (/load failed/i.test(String(error?.message || ''))) telemetry.loadFailed += 1;
+      }
+      const details = {
         ...requestMeta,
         durationMs:Math.round(performance.now()-started),
-        status:error?.status || null,
+        status,
         message:error?.message || String(error),
-        stack:error?.stack || null
-      });
+        errorName:error?.name || null,
+        errorConstructor:error?.constructor?.name || null,
+        stack:error?.stack || null,
+        telemetry:snapshot()
+      };
+      log(isAbort?'info':'error','parser.failure',details);
+      if (!isAbort && telemetry.consecutiveFailures >= 3) {
+        log('warn','worker.pressure.suspected',{
+          reason:'three_or_more_consecutive_parser_failures',
+          note:'Possible Cloudflare Free Worker pressure/resource exhaustion. This is a diagnostic inference, not proof.',
+          telemetry:snapshot({route,status,message:details.message})
+        });
+        probeWorkerHealth('consecutive-parser-failures');
+      }
       throw error;
     }
   }
@@ -117,7 +222,7 @@
       try {
         const data=await postJson(`${config.genericParserWorkerUrl}${path}`,payload,options.signal);
         const offers=collectListings(data).map(entry=>normalizeOffer(entry,'Kleinanzeigen')).filter(Boolean);
-        log('info','parser.normalized',{cartridge:item.key,path,offers:offers.length});
+        log('info','parser.normalized',{cartridge:item.key,path,offers:offers.length,telemetry:snapshot()});
         return {source:'Kleinanzeigen',status:'ok',offers,raw:data,endpoint:path};
       } catch(error) {
         if (error?.name==='AbortError') throw error;
@@ -139,9 +244,10 @@
     const automatic=[...result.offers].sort((a,b)=>(a.total??Number.POSITIVE_INFINITY)-(b.total??Number.POSITIVE_INFINITY)||a.price-b.price);
     const status=[{name:result.source,status:'ok',count:result.offers.length,endpoint:result.endpoint}];
     const checkedAt=new Date().toISOString();
-    log('info','search.complete',{cartridge:item.key,automatic:automatic.length,status});
+    log('info','search.complete',{cartridge:item.key,automatic:automatic.length,status,telemetry:snapshot()});
     return {automatic,direct:directSearches(item),status,checkedAt};
   }
 
-  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,requestJson,collectListings});
+  window.EVERCADE_WORKER_TELEMETRY=Object.freeze({snapshot,probeWorkerHealth});
+  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,requestJson,collectListings,telemetry:snapshot});
 })();
