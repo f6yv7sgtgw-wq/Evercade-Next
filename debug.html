@@ -13,7 +13,7 @@
   <section class="panel"><div class="section-head"><div><span class="eyebrow">Systemzustand</span><h2>Live-Prüfung</h2></div><button id="runChecks" class="primary">Erneut prüfen</button></div><div id="healthChecks" class="health-grid"></div></section>
 
   <section class="panel"><div class="section-head"><div><span class="eyebrow">Phase 5.2</span><h2>GenericParser Endpunkt-Test</h2></div><button id="runAllEndpointTests" class="primary">Alle testen</button></div>
-    <p class="empty">Testet den Worker direkt aus demselben Browser wie Evercade. Damit werden HTTP-Erreichbarkeit, CORS, Antwortstatus und Antwortinhalt sichtbar.</p>
+    <p class="empty">Testet den Worker direkt aus demselben Browser wie Evercade. Damit werden HTTP-Erreichbarkeit, CORS/Preflight-Probleme, Antwortstatus und Antwortinhalt sichtbar.</p>
     <div id="endpointTestButtons" class="endpoint-buttons"></div>
     <div id="endpointTestResults" class="endpoint-results"></div>
   </section>
@@ -23,5 +23,6 @@
 <script src="src/config.js"></script>
 <script src="src/eventlog.js"></script>
 <script src="src/debug.js"></script>
+<script src="src/endpoint-test.js"></script>
 </body>
 </html>
