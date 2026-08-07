@@ -43,9 +43,9 @@ const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 
-if (version !== '1.4.5.7') throw new Error(`Expected Evercade Next 1.4.5.7, found ${version}`);
-if (release.channel !== 'stable') throw new Error('1.4.5.7 must be stable');
-if (String(release.phase) !== '5.2') throw new Error('1.4.5.7 must be phase 5.2');
+if (version !== '1.4.5.8') throw new Error(`Expected Evercade Next 1.4.5.8, found ${version}`);
+if (release.channel !== 'stable') throw new Error('1.4.5.8 must be stable');
+if (String(release.phase) !== '5.2') throw new Error('1.4.5.8 must be phase 5.2');
 if (release.integration !== 'GenericParser 0.45.2 Build 6') throw new Error('Release must declare GenericParser 0.45.2 Build 6 integration');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
 if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('Release metadata must target GenericParser 0.45.2');
@@ -72,11 +72,11 @@ for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.t
 for (const marker of ['transport.context','transport.probe.start','transport.probe.complete','transport.probe.failure','transport.probe.matrix.complete','simple-health','instrumented-health','no-cors-health','workerBaseUrl','documentBaseURI','navigatorOnline','secureContext','errorConstructor','requestHeaderNames']) if (!endpointSource.includes(marker)) throw new Error(`Transport diagnostic marker missing: ${marker}`);
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
 for (const marker of ['queueOrder','createQueue','queueLoop','pauseQueue','resumeQueue','restoreQueue','queue.item.start','queue.complete']) if (!appSource.includes(marker)) throw new Error(`Phase 5.1 queue marker missing: ${marker}`);
-for (const marker of ['QUEUE_DELAY_MS = 1500','queue.delay.start','queue.delay.end','rate_limit_protection','interCartridgeDelayMs']) if (!appSource.includes(marker)) throw new Error(`1.4.5.7 queue throttling marker missing: ${marker}`);
+for (const marker of ['QUEUE_DELAY_MS = 1500','BATCH_SIZE = 10','BATCH_DELAY_MS = 30000','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','RECOVERY_HEALTH_RETRY_MS = 15000','queue.batch.pause.start','queue.recovery.triggered','queue.recovery.health','queue.recovery.complete','three_load_failed_requests','worker_free_tier_protection']) if (!appSource.includes(marker)) throw new Error(`1.4.5.8 Worker protection marker missing: ${marker}`);
 if (!appSource.includes('state.wishlist') || !appSource.includes('state.owned')) throw new Error('Queue priority or missing-cartridge filter is not connected to collection state');
 
 const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, GenericParser Build 6, persistent run diagnostics, Worker pressure telemetry and 1500 ms inter-cartridge delay.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, GenericParser Build 6, 1500 ms inter-cartridge delay, 10-cartridge batch pauses and health-gated recovery.`);
