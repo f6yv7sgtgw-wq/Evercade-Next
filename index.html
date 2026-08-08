@@ -15,18 +15,19 @@
     main,.panel,.view,.card,.card-main,.deal-center,.deal-center-grid,.deal-filter-grid{min-width:0;max-width:100%}
     .tabs{overflow-x:hidden;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
     .tabs button{min-width:0;padding:10px 7px;white-space:normal}
-    .deal-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}
+    .deal-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}
     .deal-filter-grid label{display:grid;gap:6px;color:var(--muted);font-size:.78rem;font-weight:700;min-width:0}
     .deal-filter-grid input,.deal-filter-grid select{width:100%;min-width:0;background:#0f131a;border:1px solid #323c4b;color:var(--text);border-radius:10px;padding:10px}
     .deal-center-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
     .deal-center-grid article{padding:13px;border:1px solid #303948;border-radius:12px;background:#131821;min-width:0}
     .deal-center-grid span{display:block;color:var(--muted);font-size:.78rem}.deal-center-grid strong{display:block;margin-top:4px;font-size:1.35rem}
     .deal-card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.deal-tag{border:1px solid #384255;border-radius:999px;padding:3px 7px;font-size:.7rem;color:#cfd6e2;max-width:100%}
-    .deal-tag.new{border-color:#b13b50;color:#ff8294}.deal-tag.stale{border-color:#725f35;color:#e7c879}
+    .deal-tag.new{border-color:#b13b50;color:#ff8294}.deal-tag.stale{border-color:#725f35;color:#e7c879}.deal-tag.top{border-color:#4d8f62;color:#9ee2af}
     .deal-price{font-size:1.25rem;font-weight:850;margin-top:8px}.deal-history{font-size:.76rem;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}
     .deal-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}.deal-toolbar>*{min-width:0}
     .deal-controls{grid-template-columns:minmax(0,1fr) auto}
     .source-link,.card a,.card p,.card h3{overflow-wrap:anywhere;word-break:break-word}
+    @media(max-width:900px){.deal-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media(max-width:720px){
       .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
       .deal-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -58,9 +59,10 @@
     <div class="deal-center-grid"><article><span>Aktiv</span><strong id="dealActiveCount">0</strong></article><article><span>Neu</span><strong id="dealNewCount">0</strong></article><article><span>Cartridges</span><strong id="dealCartridgeCount">0</strong></article><article><span>Bestpreis</span><strong id="dealBestPrice">—</strong></article></div>
     <div class="deal-filter-grid">
       <label>Status<select id="dealFilterStatus"><option value="active">Nur aktiv</option><option value="new">Nur neu</option><option value="all">Alle inkl. inaktiv</option></select></label>
+      <label>Bestand<select id="dealFilterOwnership"><option value="all">Alle Cartridges</option><option value="missing">Nicht in Sammlung</option><option value="owned">In Sammlung</option></select></label>
       <label>Quelle<select id="dealFilterSource"><option value="all">Alle Quellen</option></select></label>
       <label>Max. Gesamtpreis €<input id="dealMaxPrice" type="number" min="0" step="1" placeholder="kein Limit"></label>
-      <label>Sortierung<select id="dealSort"><option value="price">Gesamtpreis</option><option value="newest">Neueste zuerst</option><option value="cartridge">Cartridge</option></select></label>
+      <label>Sortierung<select id="dealSort"><option value="best">Beste Angebote</option><option value="price">Gesamtpreis</option><option value="newest">Neueste zuerst</option><option value="cartridge">Cartridge</option></select></label>
     </div>
     <div class="deal-toolbar"><small id="dealCenterMeta" class="empty">Noch keine Treffer gespeichert.</small><button id="markDealsSeen">Neue als gesehen markieren</button></div>
     <div id="automaticDeals" class="list"></div>
