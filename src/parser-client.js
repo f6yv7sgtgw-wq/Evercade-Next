@@ -29,26 +29,37 @@
     if (!text) return null;
     text = text.replace(/[^0-9,.-]/g,'');
     if (!text || text === '-' || text === '.' || text === ',') return null;
-    const lastComma = text.lastIndexOf(',');
-    const lastDot = text.lastIndexOf('.');
+    const lastComma = text.lastIndexOf(','), lastDot = text.lastIndexOf('.');
     if (lastComma > lastDot) text = text.replace(/\./g,'').replace(',','.');
     else if (lastDot > lastComma && lastComma >= 0) text = text.replace(/,/g,'');
     else if (lastComma >= 0) text = text.replace(',','.');
     const number = Number(text);
     return Number.isFinite(number) && number >= 0 ? number : null;
   };
-
-  const safeUrl = value => {
-    try { const url = new URL(String(value || '')); return /^https?:$/.test(url.protocol) ? url.href : null; }
-    catch { return null; }
+  const firstMoney = (values,{allowZero=true}={}) => {
+    let zero = null;
+    for (const value of values) {
+      const parsed = parseMoney(value);
+      if (parsed == null) continue;
+      if (parsed > 0) return parsed;
+      if (parsed === 0) zero = 0;
+    }
+    return allowZero ? zero : null;
   };
+  const safeUrl = value => { try { const url = new URL(String(value || '')); return /^https?:$/.test(url.protocol) ? url.href : null; } catch { return null; } };
 
   function normalizeOffer(raw, fallbackSource = 'Kleinanzeigen') {
-    const price = parseMoney(raw?.price ?? raw?.preis ?? raw?.amount ?? raw?.priceText ?? raw?.price_text ?? raw?.displayPrice ?? raw?.display_price ?? raw?.price?.value ?? raw?.price?.amount);
-    const shipping = parseMoney(raw?.shipping ?? raw?.versand ?? raw?.shippingCost ?? raw?.shipping_cost ?? raw?.shippingText ?? raw?.shipping_text);
-    const explicitTotal = parseMoney(raw?.total ?? raw?.gesamtpreis ?? raw?.totalPrice ?? raw?.total_price);
+    const price = firstMoney([
+      raw?.priceText,raw?.price_text,raw?.displayPrice,raw?.display_price,raw?.currentPrice,raw?.current_price,
+      raw?.price?.formatted,raw?.price?.text,raw?.price?.value,raw?.price?.amount,raw?.preis,raw?.amount,raw?.price
+    ],{allowZero:false});
+    const shipping = firstMoney([raw?.shipping,raw?.versand,raw?.shippingCost,raw?.shipping_cost,raw?.shippingText,raw?.shipping_text],{allowZero:true});
+    const explicitTotal = firstMoney([raw?.totalText,raw?.total_text,raw?.totalPrice,raw?.total_price,raw?.gesamtpreis,raw?.total],{allowZero:false});
     const url = safeUrl(raw?.url ?? raw?.link ?? raw?.href);
-    if (!url || price == null) return null;
+    if (!url || price == null) {
+      log('warn','offer.rejected.invalid_price',{source:raw?.source||fallbackSource,title:raw?.title||raw?.titel||null,rawPrice:raw?.price??null,priceText:raw?.priceText??raw?.price_text??raw?.displayPrice??null,url:url||null});
+      return null;
+    }
     const shippingKnown = shipping != null;
     const total = explicitTotal ?? (shippingKnown ? Math.round((price + shipping) * 100) / 100 : null);
     return {
@@ -61,7 +72,7 @@
   }
 
   function collectListings(payload) {
-    const candidates = [payload?.listings,payload?.results,payload?.items,payload?.data?.listings,payload?.data?.results,payload?.data?.items,payload?.response?.listings,payload?.response?.results,payload?.response?.items,payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])];
+    const candidates = [payload?.listings,payload?.results,payload?.items,payload?.offers,payload?.data?.listings,payload?.data?.results,payload?.data?.items,payload?.data?.offers,payload?.response?.listings,payload?.response?.results,payload?.response?.items,payload?.response?.offers,payload?.packets?.flatMap?.(packet => packet?.listings || packet?.results || [])];
     return candidates.find(Array.isArray) || [];
   }
   function noteRequestPressure(){ telemetry.requests+=1; const stamp=Date.now(); requestTimes.push(stamp); while(requestTimes.length&&requestTimes[0]<stamp-60000)requestTimes.shift(); telemetry.peakRequestsPer60s=Math.max(telemetry.peakRequestsPer60s,requestTimes.length); return requestTimes.length; }
@@ -76,9 +87,10 @@
     return healthProbePromise;
   }
 
-  async function requestJson(url,{method='GET',body=null,signal,attempt=0}={}){
+  async function requestJson(url,{method='GET',body=null,signal,attempt=0,headers:extraHeaders={}}={}){
     const requestId=makeRequestId(),started=performance.now(),route=new URL(url).pathname,requestRate=noteRequestPressure();
-    const headers={accept:'application/json','x-generic-parser-contract':config.genericParserContract,'x-request-id':requestId};
+    const headers={accept:'application/json',...extraHeaders};
+    if(new URL(url).origin===new URL(config.genericParserWorkerUrl).origin){headers['x-generic-parser-contract']=config.genericParserContract;headers['x-request-id']=requestId;}
     const options={method,headers,signal,cache:'no-store',mode:'cors',credentials:'omit'}; if(body!=null){headers['content-type']='application/json';options.body=JSON.stringify(body);}
     const requestMeta={requestId,timestamp:new Date().toISOString(),route,method,origin:location.origin,userAgent:navigator.userAgent,query:body?.query,source:body?.source,attempt,requestsLast60s:requestRate,totalRequests:telemetry.requests}; log('info','parser.request',requestMeta);
     try{
@@ -87,14 +99,51 @@
       if(response.ok){telemetry.successes+=1;telemetry.consecutiveFailures=0;telemetry.lastSuccessAt=new Date().toISOString();}else{telemetry.failures+=1;telemetry.consecutiveFailures+=1;telemetry.maxConsecutiveFailures=Math.max(telemetry.maxConsecutiveFailures,telemetry.consecutiveFailures);telemetry.lastFailureAt=new Date().toISOString();if(response.status===429)telemetry.http429+=1;if(response.status>=500)telemetry.http5xx+=1;}
       log(response.ok?'info':'error','parser.response',{...requestMeta,durationMs,status:response.status,hitCount,workerRequestId,cfRay,contentType:response.headers.get('content-type')||null,workerVersion,workerBuild,responseBody:response.status>=500?data:undefined,telemetry:snapshot()});
       if(!response.ok){const message=data?.error?.message||data?.message||data?.detail||`HTTP ${response.status}`;const error=new Error(typeof message==='string'?message:`HTTP ${response.status}`);Object.assign(error,{status:response.status,response:data,cfRay,workerRequestId,workerVersion,workerBuild});throw error;} return data;
-    }catch(error){const isAbort=error?.name==='AbortError',status=Number(error?.status||0)||null;if(!isAbort&&!status){telemetry.failures+=1;telemetry.consecutiveFailures+=1;telemetry.maxConsecutiveFailures=Math.max(telemetry.maxConsecutiveFailures,telemetry.consecutiveFailures);telemetry.lastFailureAt=new Date().toISOString();if(/load failed/i.test(String(error?.message||'')))telemetry.loadFailed+=1;} const details={...requestMeta,durationMs:Math.round(performance.now()-started),status,message:error?.message||String(error),errorName:error?.name||null,errorConstructor:error?.constructor?.name||null,stack:error?.stack||null,cfRay:error?.cfRay||null,workerRequestId:error?.workerRequestId||null,workerVersion:error?.workerVersion||null,workerBuild:error?.workerBuild||null,responseBody:status>=500?(error?.response??null):undefined,telemetry:snapshot()};log(isAbort?'info':'error','parser.failure',details);if(!isAbort&&telemetry.consecutiveFailures>=3){log('warn','worker.pressure.suspected',{reason:'three_or_more_consecutive_parser_failures',note:'Possible Worker pressure/resource exhaustion. This is a diagnostic inference, not proof.',telemetry:snapshot({route,status,message:details.message})});probeWorkerHealth('consecutive-parser-failures');}throw error;}
+    }catch(error){const isAbort=error?.name==='AbortError',status=Number(error?.status||0)||null;if(!isAbort&&!status){telemetry.failures+=1;telemetry.consecutiveFailures+=1;telemetry.maxConsecutiveFailures=Math.max(telemetry.maxConsecutiveFailures,telemetry.consecutiveFailures);telemetry.lastFailureAt=new Date().toISOString();if(/load failed/i.test(String(error?.message||'')))telemetry.loadFailed+=1;} const details={...requestMeta,durationMs:Math.round(performance.now()-started),status,message:error?.message||String(error),errorName:error?.name||null,errorConstructor:error?.constructor?.name||null,stack:error?.stack||null,cfRay:error?.cfRay||null,workerRequestId:error?.workerRequestId||null,workerVersion:error?.workerVersion||null,workerBuild:error?.workerBuild||null,responseBody:status>=500?(error?.response??null):undefined,telemetry:snapshot()};log(isAbort?'info':'error','parser.failure',details);if(!isAbort&&telemetry.consecutiveFailures>=3&&new URL(url).origin===new URL(config.genericParserWorkerUrl).origin){log('warn','worker.pressure.suspected',{reason:'three_or_more_consecutive_parser_failures',note:'Possible Worker pressure/resource exhaustion. This is a diagnostic inference, not proof.',telemetry:snapshot({route,status,message:details.message})});probeWorkerHealth('consecutive-parser-failures');}throw error;}
   }
-  async function postJson(url,body,signal){const route=new URL(url).pathname;for(let attempt=0;attempt<=RETRY_5XX_MAX;attempt+=1){try{const data=await requestJson(url,{method:'POST',body,signal,attempt});if(attempt>0){telemetry.retries5xxRecovered+=1;log('info','parser.retry.recovered',{route,attempt,query:body?.query,telemetry:snapshot()});}return data;}catch(error){if(error?.name==='AbortError')throw error;const status=Number(error?.status||0)||null,retryable=status!=null&&status>=500&&status<=599&&attempt<RETRY_5XX_MAX;if(!retryable)throw error;telemetry.retries5xx+=1;log('warn','parser.retry.scheduled',{route,query:body?.query,status,attempt:attempt+1,maxRetries:RETRY_5XX_MAX,delayMs:RETRY_5XX_DELAY_MS,cfRay:error?.cfRay||null,workerRequestId:error?.workerRequestId||null,workerVersion:error?.workerVersion||null,workerBuild:error?.workerBuild||null,responseBody:error?.response??null,telemetry:snapshot()});await waitWithSignal(RETRY_5XX_DELAY_MS,signal);log('info','parser.retry.start',{route,query:body?.query,attempt:attempt+1,telemetry:snapshot()});}}throw new Error('Retry loop exhausted');}
+  async function postJson(url,body,signal){const route=new URL(url).pathname;for(let attempt=0;attempt<=RETRY_5XX_MAX;attempt+=1){try{const data=await requestJson(url,{method:'POST',body,signal,attempt});if(attempt>0){telemetry.retries5xxRecovered+=1;log('info','parser.retry.recovered',{route,attempt,query:body?.query,telemetry:snapshot()});}return data;}catch(error){if(error?.name==='AbortError')throw error;const status=Number(error?.status||0)||null,retryable=status!=null&&status>=500&&status<=599&&attempt<RETRY_5XX_MAX;if(!retryable)throw error;telemetry.retries5xx+=1;log('warn','parser.retry.scheduled',{route,query:body?.query,status,attempt:attempt+1,maxRetries:RETRY_5XX_MAX,delayMs:RETRY_5XX_DELAY_MS,telemetry:snapshot()});await waitWithSignal(RETRY_5XX_DELAY_MS,signal);log('info','parser.retry.start',{route,query:body?.query,attempt:attempt+1,telemetry:snapshot()});}}throw new Error('Retry loop exhausted');}
 
   const normalizeSearchTitle = title => String(title ?? '').replace(/\s*\/\s*/g,' ').replace(/\s+/g,' ').trim();
-  async function searchKleinanzeigen(item,options={}){const normalizedTitle=normalizeSearchTitle(item.title),query=`Evercade ${normalizedTitle}`;if(normalizedTitle!==item.title)log('info','parser.query.normalized',{reason:'slash_removed',originalTitle:item.title,normalizedTitle,query});const payload={contract:config.genericParserContract,adapter:'evercade',mode:'live',source:'auto',query,page:0,cartridge:{key:item.key,title:item.title,series:item.series,number:item.number},required_terms:['Evercade'],accept_bundles:true,accept_incomplete:false,include_review:true,include_rejected:false,sort_by:'relevance'};const errors=[];for(const path of config.genericParserSearchPaths){try{const data=await postJson(`${config.genericParserWorkerUrl}${path}`,payload,options.signal);const offers=collectListings(data).map(entry=>normalizeOffer(entry,'Kleinanzeigen')).filter(Boolean);log('info','parser.normalized',{cartridge:item.key,path,offers:offers.length,telemetry:snapshot()});return{source:'Kleinanzeigen',status:'ok',offers,raw:data,endpoint:path};}catch(error){if(error?.name==='AbortError')throw error;errors.push(`${path}: ${error.message}`);}}const error=new Error(`GenericParser nicht erreichbar (${errors.join('; ')})`);error.code='GENERIC_PARSER_UNREACHABLE';throw error;}
+  async function searchKleinanzeigen(item,options={}){
+    const normalizedTitle=normalizeSearchTitle(item.title),query=`Evercade ${normalizedTitle}`;
+    if(normalizedTitle!==item.title)log('info','parser.query.normalized',{reason:'slash_removed',originalTitle:item.title,normalizedTitle,query});
+    const payload={contract:config.genericParserContract,adapter:'evercade',mode:'live',source:'auto',query,page:0,cartridge:{key:item.key,title:item.title,series:item.series,number:item.number},required_terms:['Evercade'],accept_bundles:true,accept_incomplete:false,include_review:true,include_rejected:false,sort_by:'relevance'};
+    const errors=[];
+    for(const path of config.genericParserSearchPaths){try{const data=await postJson(`${config.genericParserWorkerUrl}${path}`,payload,options.signal);const offers=collectListings(data).map(entry=>normalizeOffer(entry,'Kleinanzeigen')).filter(Boolean);log('info','parser.normalized',{cartridge:item.key,path,offers:offers.length,telemetry:snapshot()});return{source:'Kleinanzeigen',status:'ok',offers,raw:data,endpoint:path};}catch(error){if(error?.name==='AbortError')throw error;errors.push(`${path}: ${error.message}`);}}
+    const error=new Error(`GenericParser nicht erreichbar (${errors.join('; ')})`);error.code='GENERIC_PARSER_UNREACHABLE';throw error;
+  }
+
+  async function searchLegacyRetailers(item,options={}){
+    const params=new URLSearchParams({title:item.title,series:item.series,number:String(item.number)});
+    const url=`${String(config.dealApiUrl).replace(/\/$/,'')}/api/search?${params}`;
+    log('info','retailers.request',{cartridge:item.key,title:item.title,url,automaticSources:9});
+    const data=await requestJson(url,{signal:options.signal});
+    if(!Array.isArray(data?.offers)) throw new Error('Ungültige Antwort des Händler-Suchdienstes');
+    const offers=data.offers.map(entry=>normalizeOffer(entry,entry?.source||'Händler')).filter(Boolean);
+    const statuses=Array.isArray(data.sources)?data.sources.map(source=>({name:source.name||'Händler',status:source.status||'unknown',count:Number(source.accepted??source.count??0)||0,error:source.error||null})) : [];
+    log('info','retailers.response',{cartridge:item.key,offers:offers.length,sources:statuses,coverage:data.coverage||null});
+    return {source:'LegacyRetailers',status:'ok',offers,statuses,raw:data};
+  }
+
   function directSearches(item){const query=encodeURIComponent(`Evercade ${normalizeSearchTitle(item.title)}`);return config.directSources.map(source=>({name:source.name,url:source.url.replace('{query}',query)}));}
-  async function search(item,options={}){const result=await searchKleinanzeigen(item,options),automatic=[...result.offers].sort((a,b)=>(a.total??Number.POSITIVE_INFINITY)-(b.total??Number.POSITIVE_INFINITY)||a.price-b.price),status=[{name:result.source,status:'ok',count:result.offers.length,endpoint:result.endpoint}],checkedAt=new Date().toISOString();log('info','search.complete',{cartridge:item.key,automatic:automatic.length,status,telemetry:snapshot()});return{automatic,direct:directSearches(item),status,checkedAt};}
+  function dedupeOffers(offers){const map=new Map();for(const offer of offers){let key;try{const u=new URL(offer.url);u.hash='';key=`${String(offer.source).toLowerCase()}|${u.origin}${u.pathname}${u.search}`;}catch{key=`${String(offer.source).toLowerCase()}|${offer.id}`;}const old=map.get(key);if(!old||((offer.total??Infinity)<(old.total??Infinity)))map.set(key,offer);}return [...map.values()];}
+
+  async function search(item,options={}){
+    const [klein,retail]=await Promise.allSettled([searchKleinanzeigen(item,options),searchLegacyRetailers(item,options)]);
+    if(klein.status==='rejected'&&klein.reason?.name==='AbortError')throw klein.reason;
+    if(retail.status==='rejected'&&retail.reason?.name==='AbortError')throw retail.reason;
+    const offers=[]; const status=[];
+    if(klein.status==='fulfilled'){offers.push(...klein.value.offers);status.push({name:'Kleinanzeigen',status:'ok',count:klein.value.offers.length,endpoint:klein.value.endpoint});}
+    else status.push({name:'Kleinanzeigen',status:'error',count:0,error:klein.reason?.message||String(klein.reason)});
+    if(retail.status==='fulfilled'){offers.push(...retail.value.offers); if(retail.value.statuses.length)status.push(...retail.value.statuses);else status.push({name:'9 Händler',status:'ok',count:retail.value.offers.length});}
+    else status.push({name:'9 Händler',status:'error',count:0,error:retail.reason?.message||String(retail.reason)});
+    if(klein.status==='rejected'&&retail.status==='rejected')throw new Error(`Keine automatische Quelle erreichbar (Kleinanzeigen: ${klein.reason?.message}; Händler: ${retail.reason?.message})`);
+    const automatic=dedupeOffers(offers).sort((a,b)=>(a.total??Number.POSITIVE_INFINITY)-(b.total??Number.POSITIVE_INFINITY)||a.price-b.price);
+    const checkedAt=new Date().toISOString();
+    log('info','search.complete',{cartridge:item.key,automatic:automatic.length,status,telemetry:snapshot()});
+    return{automatic,direct:directSearches(item),status,checkedAt};
+  }
+
   window.EVERCADE_WORKER_TELEMETRY=Object.freeze({snapshot,probeWorkerHealth});
-  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,directSearches,normalizeOffer,requestJson,collectListings,telemetry:snapshot});
+  window.EvercadeSearch=Object.freeze({search,searchKleinanzeigen,searchLegacyRetailers,directSearches,normalizeOffer,requestJson,collectListings,telemetry:snapshot});
 })();
