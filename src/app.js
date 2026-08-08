@@ -25,7 +25,13 @@
   const RECOVERY_DELAY_MS = 60000;
   const RECOVERY_HEALTH_RETRY_MS = 15000;
   const save = () => localStorage.setItem(config.storageKey, JSON.stringify(state));
-  const money = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(2).replace('.',',')} €` : '—';
+  const numericMoney = (value,{allowZero=false}={}) => {
+    if (value == null || value === '' || typeof value === 'boolean') return null;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    return allowZero ? (number >= 0 ? number : null) : (number > 0 ? number : null);
+  };
+  const money = value => { const number=numericMoney(value,{allowZero:true}); return number==null?'—':`${number.toFixed(2).replace('.',',')} €`; };
   const item = key => catalog.find(x => x.key === key);
   const color = s => s==='console'?'red':s==='arcade'?'violet':'blue';
   const sortItems = list => [...list].sort((a,b) => (seriesOrder[a.series] - seriesOrder[b.series]) || (a.number - b.number));
@@ -45,19 +51,84 @@
     if(!state.dealCenterSeenAt) return true;
     return new Date(entry.firstSeen).getTime() > new Date(state.dealCenterSeenAt).getTime();
   }
-  function offerTotal(entry){ return Number.isFinite(Number(entry.total)) ? Number(entry.total) : Number.isFinite(Number(entry.price)) ? Number(entry.price) : Number.POSITIVE_INFINITY; }
+  function offerPrice(entry){ return numericMoney(entry?.price); }
+  function offerShipping(entry){ return entry?.shippingKnown ? numericMoney(entry?.shipping,{allowZero:true}) : null; }
+  function explicitOfferTotal(entry){ return numericMoney(entry?.total); }
+  function offerTotal(entry){
+    const explicit=explicitOfferTotal(entry);
+    if(explicit!=null) return explicit;
+    const price=offerPrice(entry), shipping=offerShipping(entry);
+    if(price!=null && entry?.shippingKnown && shipping!=null) return Math.round((price+shipping)*100)/100;
+    return price ?? Number.POSITIVE_INFINITY;
+  }
+  function normalizedTitleTokens(value){
+    const ignored=new Set(['evercade','blaze','collection','cartridge','cartouche','the','and']);
+    return String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(token=>token.length>1&&!ignored.has(token));
+  }
+  function titleMatch(entry){
+    const expected=normalizedTitleTokens(entry?.cartridgeTitle), actual=new Set(normalizedTitleTokens(entry?.title));
+    if(!expected.length) return 0;
+    return expected.filter(token=>actual.has(token)).length/expected.length;
+  }
+  function offerScore(entry,activeEntries){
+    let score=0;
+    const total=offerTotal(entry);
+    if(Number.isFinite(total)) score+=25;
+    if(entry?.shippingKnown) score+=15;
+    if(entry?.active!==false) score+=10;
+    if(/neu|ovp|new/i.test(String(entry?.condition||''))) score+=5;
+    score+=Math.round(titleMatch(entry)*25);
+    const same=(activeEntries||[]).filter(candidate=>candidate.cartridgeKey===entry.cartridgeKey).map(offerTotal).filter(Number.isFinite);
+    if(same.length&&Number.isFinite(total)){
+      const cheapest=Math.min(...same);
+      if(total<=cheapest*1.05) score+=20;
+      else if(total<=cheapest*1.15) score+=10;
+    }
+    return Math.max(0,Math.min(100,score));
+  }
+
+  function sanitizeOfferIndex(){
+    let repaired=0,removed=0;
+    for(const [key,entry] of Object.entries(state.offerIndex||{})){
+      if(!entry||!entry.url){ delete state.offerIndex[key]; removed+=1; continue; }
+      let price=offerPrice(entry);
+      if(price==null){
+        const search=state.searches?.[entry.cartridgeKey];
+        const recovered=(search?.offers||[]).find(candidate=>canonicalOfferKey(candidate)===key);
+        price=numericMoney(recovered?.price);
+      }
+      if(price==null){ delete state.offerIndex[key]; removed+=1; continue; }
+      const shipping=entry.shippingKnown?numericMoney(entry.shipping,{allowZero:true}):null;
+      let total=numericMoney(entry.total);
+      if(total==null&&entry.shippingKnown&&shipping!=null) total=Math.round((price+shipping)*100)/100;
+      const changed=entry.price!==price||entry.shipping!==shipping||entry.total!==total;
+      entry.price=price;
+      entry.shipping=shipping;
+      entry.total=total;
+      if(Array.isArray(entry.priceHistory)) entry.priceHistory=entry.priceHistory.map(point=>({
+        ...point,
+        price:numericMoney(point?.price),
+        total:numericMoney(point?.total)
+      })).filter(point=>point.price!=null);
+      if(changed) repaired+=1;
+    }
+    if(repaired||removed){ save(); log('info','deals.index.sanitized',{repaired,removed,indexed:Object.keys(state.offerIndex).length,reason:'null_zero_price_bug_cleanup'}); }
+  }
 
   function updateOfferIndex(cartridge,result){
     const checkedAt=result.checkedAt || new Date().toISOString();
     const offers=result.automatic || [];
     const priorKeys=Object.keys(state.offerIndex).filter(k=>state.offerIndex[k]?.cartridgeKey===cartridge.key);
     priorKeys.forEach(k=>{ state.offerIndex[k].active=false; state.offerIndex[k].inactiveAt=checkedAt; });
-    let added=0,updated=0,reactivated=0;
+    let added=0,updated=0,reactivated=0,rejected=0;
     for(const offer of offers){
+      const price=numericMoney(offer.price);
+      if(price==null){ rejected+=1; log('warn','deals.offer.rejected',{cartridge:cartridge.key,source:offer.source||null,title:offer.title||null,reason:'missing_positive_price'}); continue; }
       const key=canonicalOfferKey(offer);
       const previous=state.offerIndex[key];
-      const total=Number.isFinite(Number(offer.total))?Number(offer.total):null;
-      const price=Number.isFinite(Number(offer.price))?Number(offer.price):null;
+      const shipping=offer.shippingKnown?numericMoney(offer.shipping,{allowZero:true}):null;
+      const explicit=numericMoney(offer.total);
+      const total=explicit ?? (offer.shippingKnown&&shipping!=null?Math.round((price+shipping)*100)/100:null);
       const history=Array.isArray(previous?.priceHistory)?[...previous.priceHistory]:[];
       const lastHistory=history.at(-1);
       if(!lastHistory || lastHistory.price!==price || lastHistory.total!==total) history.push({at:checkedAt,price,total});
@@ -66,14 +137,14 @@
       state.offerIndex[key]={
         ...(previous||{}), key, cartridgeKey:cartridge.key, cartridgeTitle:cartridge.title, cartridgeSeries:cartridge.series, cartridgeNumber:cartridge.number,
         id:offer.id||previous?.id||key, source:offer.source||previous?.source||'Unbekannt', title:offer.title||previous?.title||cartridge.title,
-        price, shipping:Number.isFinite(Number(offer.shipping))?Number(offer.shipping):null, total,
+        price, shipping, total,
         shippingKnown:Boolean(offer.shippingKnown), location:offer.location||'', condition:offer.condition||'Unbekannt', sellerType:offer.sellerType||'Unbekannt',
         url:offer.url, firstSeen:previous?.firstSeen||checkedAt, lastSeen:checkedAt, inactiveAt:null, active:true, priceHistory:history
       };
     }
     state.searches[cartridge.key]={checkedAt,offers:offers.slice(0,20),status:result.status};
     save();
-    log('info','deals.index.updated',{cartridge:cartridge.key,checkedAt,offers:offers.length,added,updated,reactivated,inactivated:Math.max(0,priorKeys.length-offers.length),indexed:Object.keys(state.offerIndex).length});
+    log('info','deals.index.updated',{cartridge:cartridge.key,checkedAt,offers:offers.length,added,updated,reactivated,rejected,inactivated:Math.max(0,priorKeys.length-offers.length),indexed:Object.keys(state.offerIndex).length});
   }
 
   function migrateLegacyOffers(){
@@ -82,8 +153,12 @@
       const cartridge=item(cartridgeKey); if(!cartridge) continue;
       const checkedAt=search?.checkedAt||new Date().toISOString();
       for(const offer of search?.offers||[]){
+        const price=numericMoney(offer.price); if(price==null) continue;
+        const shipping=offer.shippingKnown?numericMoney(offer.shipping,{allowZero:true}):null;
+        const explicit=numericMoney(offer.total);
+        const total=explicit ?? (offer.shippingKnown&&shipping!=null?Math.round((price+shipping)*100)/100:null);
         const key=canonicalOfferKey(offer);
-        state.offerIndex[key]={key,cartridgeKey,cartridgeTitle:cartridge.title,cartridgeSeries:cartridge.series,cartridgeNumber:cartridge.number,id:offer.id||key,source:offer.source||'Unbekannt',title:offer.title||cartridge.title,price:Number.isFinite(Number(offer.price))?Number(offer.price):null,shipping:Number.isFinite(Number(offer.shipping))?Number(offer.shipping):null,total:Number.isFinite(Number(offer.total))?Number(offer.total):null,shippingKnown:Boolean(offer.shippingKnown),location:offer.location||'',condition:offer.condition||'Unbekannt',sellerType:offer.sellerType||'Unbekannt',url:offer.url,firstSeen:checkedAt,lastSeen:checkedAt,inactiveAt:null,active:true,priceHistory:[{at:checkedAt,price:Number.isFinite(Number(offer.price))?Number(offer.price):null,total:Number.isFinite(Number(offer.total))?Number(offer.total):null}]};
+        state.offerIndex[key]={key,cartridgeKey,cartridgeTitle:cartridge.title,cartridgeSeries:cartridge.series,cartridgeNumber:cartridge.number,id:offer.id||key,source:offer.source||'Unbekannt',title:offer.title||cartridge.title,price,shipping,total,shippingKnown:Boolean(offer.shippingKnown),location:offer.location||'',condition:offer.condition||'Unbekannt',sellerType:offer.sellerType||'Unbekannt',url:offer.url,firstSeen:checkedAt,lastSeen:checkedAt,inactiveAt:null,active:true,priceHistory:[{at:checkedAt,price,total}]};
       }
     }
     save();
@@ -124,7 +199,7 @@
     if(current==='all'||sources.includes(current))select.value=current;
   }
   function renderDealCenter(){
-    const all=Object.values(state.offerIndex||{}).filter(e=>e?.url);
+    const all=Object.values(state.offerIndex||{}).filter(e=>e?.url&&offerPrice(e)!=null);
     syncSourceFilter(all);
     const active=all.filter(e=>e.active!==false);
     const fresh=active.filter(isNewOffer);
@@ -135,25 +210,34 @@
     $('#dealCartridgeCount').textContent=cartridges.size;
     $('#dealBestPrice').textContent=Number.isFinite(best)?money(best):'—';
     const status=$('#dealFilterStatus')?.value||'active';
+    const ownership=$('#dealFilterOwnership')?.value||'all';
     const source=$('#dealFilterSource')?.value||'all';
     const maxRaw=Number($('#dealMaxPrice')?.value); const max=Number.isFinite(maxRaw)&&maxRaw>0?maxRaw:null;
-    const sort=$('#dealSort')?.value||'price';
+    const sort=$('#dealSort')?.value||'best';
     let rows=all.filter(e=>status==='all'||(status==='active'&&e.active!==false)||(status==='new'&&e.active!==false&&isNewOffer(e)));
+    if(ownership==='owned') rows=rows.filter(e=>state.owned.includes(e.cartridgeKey));
+    if(ownership==='missing') rows=rows.filter(e=>!state.owned.includes(e.cartridgeKey));
     if(source!=='all')rows=rows.filter(e=>e.source===source);
     if(max!=null)rows=rows.filter(e=>offerTotal(e)<=max);
     rows.sort((a,b)=>{
       if(sort==='newest')return new Date(b.firstSeen)-new Date(a.firstSeen);
       if(sort==='cartridge')return String(a.cartridgeTitle).localeCompare(String(b.cartridgeTitle),'de')||offerTotal(a)-offerTotal(b);
-      return offerTotal(a)-offerTotal(b)||String(a.cartridgeTitle).localeCompare(String(b.cartridgeTitle),'de');
+      if(sort==='price')return offerTotal(a)-offerTotal(b)||String(a.cartridgeTitle).localeCompare(String(b.cartridgeTitle),'de');
+      return offerScore(b,active)-offerScore(a,active)||offerTotal(a)-offerTotal(b)||String(a.cartridgeTitle).localeCompare(String(b.cartridgeTitle),'de');
     });
     $('#dealCenterMeta').textContent=`${rows.length} angezeigt · ${active.length} aktiv · ${fresh.length} neu · ${all.length} historisch gespeichert`;
     $('#dealStatusBadge').textContent=active.length?`${active.length} aktiv`:'Keine Treffer';
     $('#automaticDeals').innerHTML=rows.length?rows.map(e=>{
-      const total=Number.isFinite(Number(e.total))?money(e.total):`${money(e.price)}${e.shippingKnown?' + Versand':' · Versand unbekannt'}`;
+      const total=explicitOfferTotal(e);
+      const price=offerPrice(e);
+      const calculated=e.shippingKnown?offerTotal(e):null;
+      const displayPrice=total!=null?money(total):(calculated!=null&&e.shippingKnown?money(calculated):`${money(price)} · Versand unbekannt`);
       const history=e.priceHistory||[]; const prev=history.length>1?history[history.length-2]:null;
-      const delta=prev&&Number.isFinite(Number(prev.total))&&Number.isFinite(Number(e.total))?Number(e.total)-Number(prev.total):null;
+      const previousTotal=numericMoney(prev?.total), currentTotal=explicitOfferTotal(e);
+      const delta=previousTotal!=null&&currentTotal!=null?currentTotal-previousTotal:null;
       const change=delta==null?'':delta<0?` · ↓ ${money(Math.abs(delta))}`:delta>0?` · ↑ ${money(delta)}`:' · Preis unverändert';
-      return `<article class="card"><div class="card-main"><div><span class="eyebrow">${escapeHtml(e.cartridgeTitle)}</span><h3>${escapeHtml(e.title)}</h3><div class="deal-card-meta"><span class="deal-tag">${escapeHtml(e.source)}</span>${isNewOffer(e)?'<span class="deal-tag new">Neu</span>':''}${e.active===false?'<span class="deal-tag stale">Nicht mehr bestätigt</span>':''}${e.location?`<span class="deal-tag">${escapeHtml(e.location)}</span>`:''}</div><div class="deal-price">${total}</div><div class="deal-history">Erstmals ${new Date(e.firstSeen).toLocaleString('de-DE')} · zuletzt ${new Date(e.lastSeen).toLocaleString('de-DE')}${change}</div></div><div class="card-actions"><a class="button" href="${escapeHtml(e.url)}" target="_blank" rel="noopener noreferrer">Angebot öffnen</a></div></div></article>`;
+      const score=offerScore(e,active);
+      return `<article class="card"><div class="card-main"><div><span class="eyebrow">${escapeHtml(e.cartridgeTitle)}</span><h3>${escapeHtml(e.title)}</h3><div class="deal-card-meta"><span class="deal-tag">${escapeHtml(e.source)}</span>${score>=75?'<span class="deal-tag top">Top-Angebot</span>':''}${isNewOffer(e)?'<span class="deal-tag new">Neu</span>':''}${e.active===false?'<span class="deal-tag stale">Nicht mehr bestätigt</span>':''}${state.owned.includes(e.cartridgeKey)?'<span class="deal-tag">In Sammlung</span>':'<span class="deal-tag">Fehlt</span>'}${e.location?`<span class="deal-tag">${escapeHtml(e.location)}</span>`:''}</div><div class="deal-price">${displayPrice}</div><div class="deal-history">Erstmals ${new Date(e.firstSeen).toLocaleString('de-DE')} · zuletzt ${new Date(e.lastSeen).toLocaleString('de-DE')}${change}</div></div><div class="card-actions"><a class="button" href="${escapeHtml(e.url)}" target="_blank" rel="noopener noreferrer">Angebot öffnen</a></div></div></article>`;
     }).join(''):'<p class="empty">Für diese Filter sind keine Angebote vorhanden.</p>';
   }
   function renderDealResult(result,cartridge){
@@ -236,13 +320,13 @@
     document.addEventListener('click',e=>{ const b=e.target.closest('button');if(!b)return;if(b.dataset.own)toggleOwned(b.dataset.own);if(b.dataset.detail)openDetail(b.dataset.detail);if(b.dataset.deal){ $('#dealCartridge').value=b.dataset.deal; showView('deals'); const x=item(b.dataset.deal); if(x)$('#directSources').innerHTML=searchClient.directSearches(x).map(source=>`<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name)}<span>↗</span></a>`).join(''); }if(b.dataset.view)showView(b.dataset.view); });
     $('#catalogSearch').addEventListener('input',renderCatalog); $('#seriesFilter').addEventListener('change',renderCatalog); $('#runDealSearch').addEventListener('click',()=>runDealSearch());
     $('#queueStart').addEventListener('click',startQueue); $('#queuePause').addEventListener('click',pauseQueue); $('#queueResume').addEventListener('click',resumeQueue); $('#queueReset').addEventListener('click',resetQueue);
-    for(const id of ['dealFilterStatus','dealFilterSource','dealMaxPrice','dealSort']) $(`#${id}`).addEventListener(id==='dealMaxPrice'?'input':'change',renderDealCenter);
+    for(const id of ['dealFilterStatus','dealFilterOwnership','dealFilterSource','dealMaxPrice','dealSort']) $(`#${id}`).addEventListener(id==='dealMaxPrice'?'input':'change',renderDealCenter);
     $('#markDealsSeen').addEventListener('click',()=>{ state.dealCenterSeenAt=new Date().toISOString(); save(); renderDealCenter(); log('info','deals.marked.seen',{at:state.dealCenterSeenAt}); });
     $('#dealCartridge').addEventListener('change',()=>{ const x=item($('#dealCartridge').value);if(x)$('#directSources').innerHTML=searchClient.directSearches(x).map(source=>`<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name)}<span>↗</span></a>`).join(''); });
     $('#detailForm').addEventListener('submit',e=>{e.preventDefault();const key=$('#detailDialog').dataset.key;state.owned=$('#detailOwned').checked?[...new Set([...state.owned,key])]:state.owned.filter(k=>k!==key);const p=parseFloat($('#detailPrice').value);if(Number.isFinite(p))state.prices[key]=p;else delete state.prices[key];state.notes[key]=$('#detailNotes').value.trim();save();$('#detailDialog').close();renderAll();});
     $('#exportData').addEventListener('click',()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));a.download='evercade-next-backup.json';a.click();URL.revokeObjectURL(a.href);});
-    $('#importData').addEventListener('change',async e=>{try{state={...state,...JSON.parse(await e.target.files[0].text())};if(!state.queue)state.queue=emptyQueue();if(!state.offerIndex)state.offerIndex={};save();renderAll();}catch{alert('Die Datei konnte nicht importiert werden.');}});
+    $('#importData').addEventListener('change',async e=>{try{state={...state,...JSON.parse(await e.target.files[0].text())};if(!state.queue)state.queue=emptyQueue();if(!state.offerIndex)state.offerIndex={};sanitizeOfferIndex();save();renderAll();}catch{alert('Die Datei konnte nicht importiert werden.');}});
   }
-  migrateLegacyOffers(); applyVersion(); bind(); renderAll(); restoreQueue();
+  migrateLegacyOffers(); sanitizeOfferIndex(); applyVersion(); bind(); renderAll(); restoreQueue();
   const initial=item($('#dealCartridge').value); if(initial) $('#dealCartridge').dispatchEvent(new Event('change'));
 })();
