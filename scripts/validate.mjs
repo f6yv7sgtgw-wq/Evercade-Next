@@ -9,7 +9,7 @@ if (!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('VERSION.json mu
 
 const requiredFiles = [
   'index.html','debug.html','styles.css','manifest.webmanifest',
-  'src/release-loader.js','src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js','src/parser-client.js','src/app.js',
+  'src/release-loader.js','src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js','src/parser-client.js','src/offer-guard.js','src/app.js',
   'scripts/smoke.mjs','.nojekyll'
 ];
 for (const file of requiredFiles) if (!fs.existsSync(file)) throw new Error(`Missing ${file}`);
@@ -32,7 +32,7 @@ if (!debugHtml.includes('data-evercade-page="debug"')) throw new Error('debug.ht
 for (const id of ['runChecks','healthChecks','downloadLog','clearLog','eventLog','runAllEndpointTests','endpointTestButtons','endpointTestResults','runTransportProbes','transportContext','transportProbeResults']) if (!debugHtml.includes(`id="${id}"`)) throw new Error(`Missing diagnostics element ${id}`);
 
 const loaderSource = read('src/release-loader.js');
-for (const asset of ['src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/app.js','src/debug.js','src/endpoint-test.js']) if (!loaderSource.includes(asset)) throw new Error(`Release loader missing ${asset}`);
+for (const asset of ['src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/offer-guard.js','src/app.js','src/debug.js','src/endpoint-test.js']) if (!loaderSource.includes(asset)) throw new Error(`Release loader missing ${asset}`);
 for (const marker of ["fetch(`VERSION.json?t=${Date.now()}`", "cache: 'no-store'", "?v=${token}", 'window.EVERCADE_RELEASE']) if (!loaderSource.includes(marker)) throw new Error(`Release loader cache-busting marker missing: ${marker}`);
 
 const catalogSource = read('src/catalog.js');
@@ -42,15 +42,16 @@ if (count !== 87) throw new Error(`Expected 87 catalog entries, found ${count}`)
 
 const configSource = read('src/config.js');
 const parserSource = read('src/parser-client.js');
+const guardSource = read('src/offer-guard.js');
 const eventSource = read('src/eventlog.js');
 const debugSource = read('src/debug.js');
 const endpointSource = read('src/endpoint-test.js');
 const appSource = read('src/app.js');
 const smokeSource = read('scripts/smoke.mjs');
 
-if (version !== '1.4.7.2') throw new Error(`Expected Evercade Next 1.4.7.2, found ${version}`);
-if (release.channel !== 'stable') throw new Error('1.4.7.2 must be stable');
-if (String(release.phase) !== '5.3') throw new Error('1.4.7.2 must remain phase 5.3');
+if (version !== '1.4.7.3') throw new Error(`Expected Evercade Next 1.4.7.3, found ${version}`);
+if (release.channel !== 'stable') throw new Error('1.4.7.3 must be stable');
+if (String(release.phase) !== '5.3') throw new Error('1.4.7.3 must remain phase 5.3');
 if (!String(release.integration).includes('GenericParser 0.45.2 Build 6')) throw new Error('Release must preserve GenericParser 0.45.2 Build 6 integration');
 if (!String(release.integration).includes('nine-retailer')) throw new Error('Release must declare restored nine-retailer integration');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('Release metadata must preserve generic-parser-module-v1');
@@ -83,6 +84,9 @@ if (!parserSource.includes('/api/search?${params}')) throw new Error('Legacy ret
 for (const marker of ['firstMoney','allowZero:false','offer.rejected.invalid_price','priceText','displayPrice']) if (!parserSource.includes(marker)) throw new Error(`Price normalization marker missing: ${marker}`);
 for (const marker of ['Promise.allSettled','dedupeOffers','Kleinanzeigen','9 Händler']) if (!parserSource.includes(marker)) throw new Error(`Multi-source merge marker missing: ${marker}`);
 
+for (const marker of ['foreign_platform_marker','insufficient_evercade_evidence','strong_title_match','match >= 0.75','offer.rejected.platform_guard','deals.index.platform_sanitized','platformGuard']) if (!guardSource.includes(marker)) throw new Error(`1.4.7.3 platform-guard marker missing: ${marker}`);
+for (const marker of ['playstation','ps5','ps4','xbox','nintendo\\s*switch']) if (!guardSource.toLowerCase().includes(marker.toLowerCase())) throw new Error(`Foreign-platform marker missing from guard: ${marker}`);
+
 for (const marker of ['offerIndex','dealCenterSeenAt','canonicalOfferKey','updateOfferIndex','migrateLegacyOffers','renderDealCenter','deals.index.updated','priceHistory','inactiveAt','firstSeen','lastSeen','dealFilterStatus','dealFilterOwnership','dealFilterSource','dealMaxPrice','dealSort']) if (!appSource.includes(marker)) throw new Error(`Phase 5.3 Trefferzentrale marker missing: ${marker}`);
 for (const marker of ['numericMoney','sanitizeOfferIndex','null_zero_price_bug_cleanup','missing_positive_price','offerScore','titleMatch','Top-Angebot',"sort==='best'", "ownership==='owned'", "ownership==='missing'"]) if (!appSource.includes(marker)) throw new Error(`1.4.7.2 pricing/ranking marker missing: ${marker}`);
 for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','RECOVERY_FAILURE_THRESHOLD = 3','RECOVERY_DELAY_MS = 60000','paid_worker_pacing']) if (!appSource.includes(marker)) throw new Error(`Paid-worker pacing/recovery marker missing: ${marker}`);
@@ -94,8 +98,8 @@ if (!debugSource.includes('diagnostics.complete')) throw new Error('Diagnostics 
 for (const marker of ['endpoint.test.start','endpoint.test.complete','endpoint.test.failure']) if (!endpointSource.includes(marker)) throw new Error(`Endpoint diagnostic marker missing: ${marker}`);
 if (!smokeSource.includes('EXPECTED_VERSION') || !smokeSource.includes('debug.html')) throw new Error('Public smoke test incomplete');
 
-const runtimeSource = appSource + configSource + parserSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
+const runtimeSource = appSource + configSource + parserSource + guardSource + eventSource + debugSource + endpointSource + loaderSource + html + debugHtml;
 if (/0\.9\.|0\.8\.|0\.7\./.test(runtimeSource)) throw new Error('Legacy version literal found in runtime source');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json is not declared as canonical version source');
 
-console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, additive nine-retailer search, strict positive prices, ownership filtering, best-offer ranking and horizontal-overflow protection.`);
+console.log(`Evercade Next ${version}: validation passed with ${count} catalog entries, additive nine-retailer search, strict positive prices, ownership filtering, best-offer ranking, cross-platform rejection and horizontal-overflow protection.`);
