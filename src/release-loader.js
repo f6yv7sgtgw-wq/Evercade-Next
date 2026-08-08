@@ -3,7 +3,7 @@
 
   const page = document.documentElement.dataset.evercadePage || 'app';
   const scriptsByPage = {
-    app: ['src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/app.js'],
+    app: ['src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/offer-guard.js','src/app.js'],
     debug: ['src/config.js','src/eventlog.js','src/debug.js','src/endpoint-test.js']
   };
 
