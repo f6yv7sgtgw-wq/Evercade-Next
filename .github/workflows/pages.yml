@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize Evercade Next 1.5.0
+        run: bash scripts/materialize-1.5.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -28,6 +30,7 @@ jobs:
       - run: node --check src/debug.js
       - run: node --check src/endpoint-test.js
       - run: node --check src/parser-client.js
+      - run: node --check src/offer-guard.js
       - run: node --check src/app.js
       - run: node --check scripts/smoke.mjs
       - run: node scripts/validate.mjs
@@ -53,6 +56,8 @@ jobs:
     needs: deploy
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize Evercade Next 1.5.0
+        run: bash scripts/materialize-1.5.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
