@@ -1,4 +1,4 @@
-name: Validate deploy and verify Evercade Next
+name: Normalize and deploy Evercade Next 1.5.0
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,15 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
+  normalize_validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Materialize Evercade Next 1.5.0
-        run: bash scripts/materialize-1.5.sh
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Materialize and normalize canonical 1.5.0 source tree
+        run: bash scripts/normalize-1.5.sh
       - run: node --check src/config.js
       - run: node --check src/catalog.js
       - run: node --check src/eventlog.js
@@ -43,7 +45,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: validate
+    needs: normalize_validate
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
@@ -55,17 +57,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy
     steps:
-      - uses: actions/checkout@v4
-      - name: Materialize Evercade Next 1.5.0
-        run: bash scripts/materialize-1.5.sh
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Read release version
-        id: version
-        run: echo "value=$(node -p \"require('./VERSION.json').version\")" >> "$GITHUB_OUTPUT"
-      - name: Verify public deployment
+      - name: Verify public VERSION.json and 1.5.0 UI markers
         env:
           PAGES_URL: ${{ needs.deploy.outputs.page_url }}
-          EXPECTED_VERSION: ${{ steps.version.outputs.value }}
-        run: node scripts/smoke.mjs
+        run: |
+          set -euo pipefail
+          for i in {1..12}; do
+            version="$(curl -fsSL "${PAGES_URL%/}/VERSION.json?t=$(date +%s)" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' || true)"
+            html="$(curl -fsSL "${PAGES_URL%/}/?t=$(date +%s)" || true)"
+            if [ "$version" = "1.5.0" ] && printf '%s' "$html" | grep -q 'data-view="queue">Suche</button>'; then
+              echo "Evercade Next 1.5.0 is live."
+              exit 0
+            fi
+            echo "Waiting for Pages propagation: version=$version"
+            sleep 10
+          done
+          echo "Public Pages verification failed."
+          exit 1
