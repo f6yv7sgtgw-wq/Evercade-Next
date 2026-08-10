@@ -65,7 +65,11 @@ jobs:
           node-version: 22
       - name: Read release version
         id: version
-        run: echo "value=$(node -p \"require('./VERSION.json').version\")" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -e "const fs=require('fs'); process.stdout.write(JSON.parse(fs.readFileSync('VERSION.json','utf8')).version)")"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
       - name: Verify public deployment
         env:
           PAGES_URL: ${{ needs.deploy.outputs.page_url }}
