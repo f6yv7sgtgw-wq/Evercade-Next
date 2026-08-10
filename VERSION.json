@@ -1,9 +1,9 @@
 {
   "product": "Project Evercade Next",
-  "version": "1.4.7.3",
-  "displayVersion": "1.4.7.3",
+  "version": "1.5.0",
+  "displayVersion": "1.5.0",
   "channel": "stable",
-  "releaseDate": "2026-08-08",
+  "releaseDate": "2026-08-10",
   "pagesUrl": "https://f6yv7sgtgw-wq.github.io/Evercade-Next/",
   "deployment": "github-actions-pages",
   "versionSource": "VERSION.json",
@@ -16,6 +16,11 @@
     "workerUrl": "https://genericparser.f6yv7sgtgw.workers.dev"
   },
   "features": [
+    "Official cartridge packaging images for all 87 catalog entries",
+    "Packaging images in collection, catalog and Trefferzentrale cards",
+    "Compact collection cards without Treffer and Details actions",
+    "Mobile-optimized collection progress, header, navigation, filters and card controls",
+    "Vollsuche renamed to Suche across the visible interface",
     "Phase 5.3 centralized Trefferzentrale",
     "Kleinanzeigen search through GenericParser 0.45.2 Build 6",
     "Automatic live search through the legacy Project Evercade deal service for nine retailers",
