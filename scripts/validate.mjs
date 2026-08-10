@@ -64,7 +64,7 @@ for (const marker of ['generic-parser-module-v1',"genericParserExpectedVersion: 
 for (const source of ['DragonBox','ASC-Shop','Just For Games Deutschland','Coolshop Deutschland','Enzinger','GameCenterVS','Vitrex-Shop','Funstock','Trumox']) requireMarker(config,source,`automatic retailer ${source}`);
 for (const marker of ['RETRY_5XX_DELAY_MS = 5000','normalizeSearchTitle','parser.query.normalized','slash_removed','searchLegacyRetailers','automaticSources:9','firstMoney','offer.rejected.invalid_price','Promise.allSettled']) requireMarker(parser,marker,'parser regression marker');
 for (const marker of ['foreign_platform_marker','insufficient_evercade_evidence','match >= 0.75','platformGuard','playstation','ps5','xbox']) requireMarker(guard.toLowerCase(),marker.toLowerCase(),'platform guard marker');
-for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','offerIndex','dealFilterOwnership','offerScore','null_zero_price_bug_cleanup',"sort==='best'", "ownership==='owned'", "ownership==='missing'"]) requireMarker(app,marker,'Evercade runtime marker');
+for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','offerIndex','dealFilterOwnership','offerScore','null_zero_price_bug_cleanup',"const sort=$('#dealSort')?.value||'best'",'offerScore(b,active)-offerScore(a,active)', "ownership==='owned'", "ownership==='missing'"]) requireMarker(app,marker,'Evercade runtime marker');
 
 const debugHtml = read('debug.html');
 requireMarker(debugHtml,'data-evercade-page="debug"','debug page marker');
