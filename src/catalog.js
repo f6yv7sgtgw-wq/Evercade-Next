@@ -7,5 +7,5 @@ window.EVERCADE_CATALOG = [
   series,
   number,
   title,
-  image:`assets/cartridges/${series}-${String(number).padStart(2,'0')}.webp`
+  spriteIndex: series==='arcade' ? number-1 : series==='computer' ? 24+number-1 : 34+number-1
 }));
