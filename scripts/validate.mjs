@@ -8,8 +8,8 @@ const requireMarker = (source, marker, label=marker) => {
 };
 
 const release = json('VERSION.json');
-if (release.version !== '1.5.0' || release.displayVersion !== '1.5.0') throw new Error(`Expected Evercade Next 1.5.0, found ${release.version}`);
-if (release.channel !== 'stable') throw new Error('Evercade Next 1.5.0 must be stable');
+if (release.version !== '1.5.1' || release.displayVersion !== '1.5.1') throw new Error(`Expected Evercade Next 1.5.1, found ${release.version}`);
+if (release.channel !== 'stable') throw new Error('Evercade Next 1.5.1 must be stable');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json must remain the canonical version source');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('GenericParser contract regression');
 if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('GenericParser version regression');
@@ -72,4 +72,4 @@ requireMarker(debugHtml,'src/release-loader.js','debug release loader');
 const smoke = read('scripts/smoke.mjs');
 for (const marker of ['EXPECTED_VERSION','debug.html']) requireMarker(smoke,marker,'public smoke test');
 
-console.log(`Evercade Next 1.5.0: canonical direct-source validation passed (${catalogCount} cartridges, ${sprite.length} byte WebP sprite, no release materialization layer).`);
+console.log(`Evercade Next 1.5.1: canonical direct-source validation passed (${catalogCount} cartridges, ${sprite.length} byte WebP sprite, no release materialization layer).`);
