@@ -36,6 +36,8 @@ jobs:
       - run: node --check src/sprite-1.5-03.js
       - run: node --check src/sprite-1.5-04.js
       - run: node --check src/ui-1.5.js
+      - run: node --check src/ui-1.6.js
+      - run: node --check sw.js
       - run: node --check scripts/smoke.mjs
       - run: node scripts/validate.mjs
       - uses: actions/upload-pages-artifact@v3
@@ -75,14 +77,23 @@ jobs:
           PAGES_URL: ${{ needs.deploy.outputs.page_url }}
           EXPECTED_VERSION: ${{ steps.version.outputs.value }}
         run: node scripts/smoke.mjs
-      - name: Verify public 1.5 UI
+      - name: Verify public 1.6 UI and PWA
         env:
           PAGES_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
           set -euo pipefail
           html="$(curl -fsSL "${PAGES_URL%/}/?t=$(date +%s)")"
           loader="$(curl -fsSL "${PAGES_URL%/}/src/release-loader.js?t=$(date +%s)")"
+          manifest="$(curl -fsSL "${PAGES_URL%/}/manifest.webmanifest?t=$(date +%s)")"
           printf '%s' "$html" | grep -q 'data-view="queue">Suche</button>'
+          printf '%s' "$html" | grep -q 'id="dealSearch"'
+          printf '%s' "$html" | grep -q 'id="dealFilterSeries"'
+          printf '%s' "$html" | grep -q 'apple-touch-icon'
           printf '%s' "$loader" | grep -q 'src/ui-1.5.js'
+          printf '%s' "$loader" | grep -q 'src/ui-1.6.js'
           printf '%s' "$loader" | grep -q 'src/sprite-1.5-04.js'
-          echo "Evercade Next 1.5.0 UI is live."
+          printf '%s' "$manifest" | grep -q '"name": "Evercade"'
+          curl -fsSL -o /dev/null "${PAGES_URL%/}/sw.js?t=$(date +%s)"
+          curl -fsSL -o /dev/null "${PAGES_URL%/}/icons/icon-180.png"
+          curl -fsSL -o /dev/null "${PAGES_URL%/}/icons/icon-512.png"
+          echo "Evercade Next 1.6.0 UI and PWA assets are live."

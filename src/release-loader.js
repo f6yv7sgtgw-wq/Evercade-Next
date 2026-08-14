@@ -5,7 +5,7 @@
   const scriptsByPage = {
     app: [
       'src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/offer-guard.js','src/app.js',
-      'src/sprite-1.5-00.js','src/sprite-1.5-01.js','src/sprite-1.5-02.js','src/sprite-1.5-03.js','src/sprite-1.5-04.js','src/ui-1.5.js'
+      'src/sprite-1.5-00.js','src/sprite-1.5-01.js','src/sprite-1.5-02.js','src/sprite-1.5-03.js','src/sprite-1.5-04.js','src/ui-1.5.js','src/ui-1.6.js'
     ],
     debug: ['src/config.js','src/eventlog.js','src/debug.js','src/endpoint-test.js']
   };

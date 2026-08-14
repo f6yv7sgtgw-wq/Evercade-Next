@@ -1,5 +1,5 @@
 {
-  "name": "Project Evercade Next",
+  "name": "Evercade",
   "short_name": "Evercade",
   "id": "./",
   "start_url": "./",
@@ -7,5 +7,9 @@
   "display": "standalone",
   "background_color": "#080a0f",
   "theme_color": "#080a0f",
-  "description": "Evercade-Sammlung, Katalog und Preisverwaltung"
+  "description": "Evercade-Sammlung, Katalog und Preisverwaltung",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
 }

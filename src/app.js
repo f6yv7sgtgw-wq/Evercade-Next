@@ -211,12 +211,16 @@
     $('#dealBestPrice').textContent=Number.isFinite(best)?money(best):'—';
     const status=$('#dealFilterStatus')?.value||'active';
     const ownership=$('#dealFilterOwnership')?.value||'all';
+    const series=$('#dealFilterSeries')?.value||'all';
+    const query=($('#dealSearch')?.value||'').trim().toLowerCase();
     const source=$('#dealFilterSource')?.value||'all';
     const maxRaw=Number($('#dealMaxPrice')?.value); const max=Number.isFinite(maxRaw)&&maxRaw>0?maxRaw:null;
     const sort=$('#dealSort')?.value||'best';
     let rows=all.filter(e=>status==='all'||(status==='active'&&e.active!==false)||(status==='new'&&e.active!==false&&isNewOffer(e)));
     if(ownership==='owned') rows=rows.filter(e=>state.owned.includes(e.cartridgeKey));
     if(ownership==='missing') rows=rows.filter(e=>!state.owned.includes(e.cartridgeKey));
+    if(series!=='all')rows=rows.filter(e=>e.cartridgeSeries===series);
+    if(query)rows=rows.filter(e=>[e.cartridgeTitle,e.title,e.source].some(value=>String(value||'').toLowerCase().includes(query)));
     if(source!=='all')rows=rows.filter(e=>e.source===source);
     if(max!=null)rows=rows.filter(e=>offerTotal(e)<=max);
     rows.sort((a,b)=>{
@@ -320,7 +324,7 @@
     document.addEventListener('click',e=>{ const b=e.target.closest('button');if(!b)return;if(b.dataset.own)toggleOwned(b.dataset.own);if(b.dataset.detail)openDetail(b.dataset.detail);if(b.dataset.deal){ $('#dealCartridge').value=b.dataset.deal; showView('deals'); const x=item(b.dataset.deal); if(x)$('#directSources').innerHTML=searchClient.directSearches(x).map(source=>`<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name)}<span>↗</span></a>`).join(''); }if(b.dataset.view)showView(b.dataset.view); });
     $('#catalogSearch').addEventListener('input',renderCatalog); $('#seriesFilter').addEventListener('change',renderCatalog); $('#runDealSearch').addEventListener('click',()=>runDealSearch());
     $('#queueStart').addEventListener('click',startQueue); $('#queuePause').addEventListener('click',pauseQueue); $('#queueResume').addEventListener('click',resumeQueue); $('#queueReset').addEventListener('click',resetQueue);
-    for(const id of ['dealFilterStatus','dealFilterOwnership','dealFilterSource','dealMaxPrice','dealSort']) $(`#${id}`).addEventListener(id==='dealMaxPrice'?'input':'change',renderDealCenter);
+    for(const id of ['dealSearch','dealFilterSeries','dealFilterStatus','dealFilterOwnership','dealFilterSource','dealMaxPrice','dealSort']) $(`#${id}`).addEventListener(id==='dealMaxPrice'||id==='dealSearch'?'input':'change',renderDealCenter);
     $('#markDealsSeen').addEventListener('click',()=>{ state.dealCenterSeenAt=new Date().toISOString(); save(); renderDealCenter(); log('info','deals.marked.seen',{at:state.dealCenterSeenAt}); });
     $('#dealCartridge').addEventListener('change',()=>{ const x=item($('#dealCartridge').value);if(x)$('#directSources').innerHTML=searchClient.directSearches(x).map(source=>`<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name)}<span>↗</span></a>`).join(''); });
     $('#detailForm').addEventListener('submit',e=>{e.preventDefault();const key=$('#detailDialog').dataset.key;state.owned=$('#detailOwned').checked?[...new Set([...state.owned,key])]:state.owned.filter(k=>k!==key);const p=parseFloat($('#detailPrice').value);if(Number.isFinite(p))state.prices[key]=p;else delete state.prices[key];state.notes[key]=$('#detailNotes').value.trim();save();$('#detailDialog').close();renderAll();});

@@ -8,17 +8,18 @@ const requireMarker = (source, marker, label=marker) => {
 };
 
 const release = json('VERSION.json');
-if (release.version !== '1.5.1' || release.displayVersion !== '1.5.1') throw new Error(`Expected Evercade Next 1.5.1, found ${release.version}`);
-if (release.channel !== 'stable') throw new Error('Evercade Next 1.5.1 must be stable');
+if (release.version !== '1.6.0' || release.displayVersion !== '1.6.0') throw new Error(`Expected Evercade Next 1.6.0, found ${release.version}`);
+if (release.channel !== 'stable') throw new Error('Evercade Next 1.6.0 must be stable');
 if (release.versionSource !== 'VERSION.json') throw new Error('VERSION.json must remain the canonical version source');
 if (release.genericParser?.contract !== 'generic-parser-module-v1') throw new Error('GenericParser contract regression');
 if (release.genericParser?.expectedVersion !== '0.45.2') throw new Error('GenericParser version regression');
 if (release.genericParser?.expectedBuild !== 'gp-0452-20260807-6') throw new Error('GenericParser Build 6 regression');
 
 const requiredFiles = [
-  'index.html','debug.html','styles.css','manifest.webmanifest','.nojekyll',
+  'index.html','debug.html','styles.css','manifest.webmanifest','.nojekyll','sw.js',
+  'icons/icon-180.png','icons/icon-192.png','icons/icon-512.png',
   'src/release-loader.js','src/config.js','src/catalog.js','src/eventlog.js','src/debug.js','src/endpoint-test.js',
-  'src/parser-client.js','src/offer-guard.js','src/app.js','src/ui-1.5.js',
+  'src/parser-client.js','src/offer-guard.js','src/app.js','src/ui-1.5.js','src/ui-1.6.js',
   'src/sprite-1.5-00.js','src/sprite-1.5-01.js','src/sprite-1.5-02.js','src/sprite-1.5-03.js','src/sprite-1.5-04.js',
   'scripts/smoke.mjs'
 ];
@@ -32,12 +33,28 @@ requireMarker(html,'data-view="queue">Suche</button>','visible Suche navigation'
 if (html.includes('data-view="queue">Vollsuche</button>')) throw new Error('Vollsuche must be renamed to Suche');
 if (html.includes('data-view="missing"') || html.includes('data-view="wishlist"')) throw new Error('Fehlend/Wünsche must not return to primary navigation');
 for (const marker of ['html,body{max-width:100%;overflow-x:hidden}','grid-template-columns:repeat(4,minmax(0,1fr))']) requireMarker(html,marker,'mobile overflow protection');
-for (const id of ['collectionList','catalogList','automaticDeals','dealFilterOwnership','dealSort','queueView']) requireMarker(html,`id="${id}"`,`UI element ${id}`);
+for (const id of ['collectionList','catalogList','automaticDeals','dealSearch','dealFilterSeries','dealFilterOwnership','dealSort','queueView']) requireMarker(html,`id="${id}"`,`UI element ${id}`);
+for (const marker of [
+  'rel="manifest" href="manifest.webmanifest"',
+  'rel="apple-touch-icon" href="icons/icon-180.png"',
+  'name="apple-mobile-web-app-title" content="Evercade"',
+  'name="apple-mobile-web-app-status-bar-style" content="black-translucent"',
+  "navigator.serviceWorker.register('sw.js')"
+]) requireMarker(html,marker,`PWA marker ${marker}`);
+
+const manifest = json('manifest.webmanifest');
+if (manifest.name !== 'Evercade' || manifest.short_name !== 'Evercade') throw new Error('PWA home-screen name must be Evercade');
+if (manifest.display !== 'standalone') throw new Error('PWA must request standalone display');
+if (!Array.isArray(manifest.icons) || manifest.icons.length !== 2) throw new Error('PWA manifest must declare 192 and 512 icons');
+for (const icon of manifest.icons) if (!exists(icon.src)) throw new Error(`Manifest icon missing on disk: ${icon.src}`);
+
+const sw = read('sw.js');
+for (const marker of ["CACHE = 'evercade-next-1.6.0'",'network-first','self.skipWaiting()','self.clients.claim()',"request.mode === 'navigate'"]) requireMarker(sw,marker,`service worker marker ${marker}`);
 
 const loader = read('src/release-loader.js');
 for (const asset of [
   'src/config.js','src/eventlog.js','src/catalog.js','src/parser-client.js','src/offer-guard.js','src/app.js',
-  'src/sprite-1.5-00.js','src/sprite-1.5-01.js','src/sprite-1.5-02.js','src/sprite-1.5-03.js','src/sprite-1.5-04.js','src/ui-1.5.js'
+  'src/sprite-1.5-00.js','src/sprite-1.5-01.js','src/sprite-1.5-02.js','src/sprite-1.5-03.js','src/sprite-1.5-04.js','src/ui-1.5.js','src/ui-1.6.js'
 ]) requireMarker(loader,asset,`release-loader asset ${asset}`);
 for (const marker of ["fetch(`VERSION.json?t=${Date.now()}`","cache: 'no-store'","?v=${token}",'window.EVERCADE_RELEASE']) requireMarker(loader,marker,'release cache busting');
 
@@ -52,6 +69,9 @@ if (sprite.subarray(0,4).toString('ascii') !== 'RIFF' || sprite.subarray(8,12).t
 const ui = read('src/ui-1.5.js');
 for (const marker of ['EVERCADE_UI_150','spriteEntries:87','#collectionList .card-actions','#catalogList .card','#automaticDeals .card','background-size:1000% 900%','overflow-x:hidden']) requireMarker(ui,marker,`1.5 UI marker ${marker}`);
 
+const ui16 = read('src/ui-1.6.js');
+for (const marker of ['EVERCADE_UI_160','env(safe-area-inset-top)','env(safe-area-inset-bottom)','display-mode:standalone']) requireMarker(ui16,marker,`1.6 UI marker ${marker}`);
+
 const catalog = read('src/catalog.js');
 const catalogCount = (catalog.match(/\['(?:console|arcade|computer)',\d+,'/g) || []).length;
 if (catalogCount !== 87) throw new Error(`Expected 87 catalog entries, found ${catalogCount}`);
@@ -64,7 +84,7 @@ for (const marker of ['generic-parser-module-v1',"genericParserExpectedVersion: 
 for (const source of ['DragonBox','ASC-Shop','Just For Games Deutschland','Coolshop Deutschland','Enzinger','GameCenterVS','Vitrex-Shop','Funstock','Trumox']) requireMarker(config,source,`automatic retailer ${source}`);
 for (const marker of ['RETRY_5XX_DELAY_MS = 5000','normalizeSearchTitle','parser.query.normalized','slash_removed','searchLegacyRetailers','automaticSources:9','firstMoney','offer.rejected.invalid_price','Promise.allSettled']) requireMarker(parser,marker,'parser regression marker');
 for (const marker of ['foreign_platform_marker','insufficient_evercade_evidence','match >= 0.75','platformGuard','playstation','ps5','xbox']) requireMarker(guard.toLowerCase(),marker.toLowerCase(),'platform guard marker');
-for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','offerIndex','dealFilterOwnership','offerScore','null_zero_price_bug_cleanup',"const sort=$('#dealSort')?.value||'best'",'offerScore(b,active)-offerScore(a,active)', "ownership==='owned'", "ownership==='missing'"]) requireMarker(app,marker,'Evercade runtime marker');
+for (const marker of ['QUEUE_DELAY_MS = 50','BATCH_DELAY_MS = 0','offerIndex','dealFilterOwnership','offerScore','null_zero_price_bug_cleanup',"const sort=$('#dealSort')?.value||'best'",'offerScore(b,active)-offerScore(a,active)', "ownership==='owned'", "ownership==='missing'", "series!=='all'", "$('#dealSearch')", 'e.cartridgeSeries===series']) requireMarker(app,marker,'Evercade runtime marker');
 
 const debugHtml = read('debug.html');
 requireMarker(debugHtml,'data-evercade-page="debug"','debug page marker');
@@ -72,4 +92,4 @@ requireMarker(debugHtml,'src/release-loader.js','debug release loader');
 const smoke = read('scripts/smoke.mjs');
 for (const marker of ['EXPECTED_VERSION','debug.html']) requireMarker(smoke,marker,'public smoke test');
 
-console.log(`Evercade Next 1.5.1: canonical direct-source validation passed (${catalogCount} cartridges, ${sprite.length} byte WebP sprite, no release materialization layer).`);
+console.log(`Evercade Next 1.6.0: canonical direct-source validation passed (${catalogCount} cartridges, ${sprite.length} byte WebP sprite, PWA assets present, Treffer search & series filter wired).`);
